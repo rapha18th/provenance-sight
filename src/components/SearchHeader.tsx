@@ -77,18 +77,24 @@ export function SearchHeader({ onSearch, placeholder = "Search for suspicious ob
         </form>
 
         {/* Stats */}
-        {showStats && stats && (
+        {showStats && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
-              <div className="text-2xl font-bold text-slate-100">{stats.total_objects.toLocaleString()}</div>
+              <div className="text-2xl font-bold text-slate-100">
+                {stats?.total_objects?.toLocaleString() || '---'}
+              </div>
               <div className="text-sm text-slate-400">Total Objects</div>
             </div>
             <div className="bg-gradient-warning rounded-xl p-4 border border-slate-700">
-              <div className="text-2xl font-bold text-slate-100">{stats.flagged_objects.toLocaleString()}</div>
+              <div className="text-2xl font-bold text-slate-100">
+                {stats?.flagged_objects?.toLocaleString() || '---'}
+              </div>
               <div className="text-sm text-slate-300">Flagged Objects</div>
             </div>
             <div className="bg-gradient-danger rounded-xl p-4 border border-slate-700">
-              <div className="text-2xl font-bold text-slate-100">{stats.high_risk.toLocaleString()}</div>
+              <div className="text-2xl font-bold text-slate-100">
+                {stats?.high_risk?.toLocaleString() || '---'}
+              </div>
               <div className="text-sm text-slate-300">High Risk</div>
             </div>
           </div>
