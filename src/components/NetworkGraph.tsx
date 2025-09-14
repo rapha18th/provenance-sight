@@ -53,13 +53,12 @@ export function NetworkGraph({
       .selectAll("line")
       .data(edgesCopy)
       .join("line")
-      .attr("stroke", (d) => {
-        switch (d.period) {
-          case 'nazi': return 'hsl(var(--edge-nazi))';
-          case 'unesco': return 'hsl(var(--edge-unesco))';
-          default: return 'hsl(var(--edge-normal))';
-        }
-      })
+        .attr("stroke", (d) => {
+          // Use policy array to determine edge color
+          if (d.policy && d.policy.includes('NAZI_ERA')) return 'hsl(var(--edge-nazi))';
+          if (d.policy && d.policy.includes('UNESCO_1970')) return 'hsl(var(--edge-unesco))';
+          return 'hsl(var(--edge-normal))';
+        })
       .attr("stroke-width", 2)
       .attr("stroke-opacity", 0.8);
 
@@ -80,18 +79,13 @@ export function NetworkGraph({
       .attr("fill", (d) => {
         switch (d.type) {
           case 'object': return 'hsl(var(--node-object))';
-          case 'person': return 'hsl(var(--node-person))';
+          case 'actor': return 'hsl(var(--node-person))';
           case 'place': return 'hsl(var(--node-place))';
-          case 'event': return 'hsl(var(--node-event))';
           default: return 'hsl(var(--slate-500))';
         }
       })
-      .attr("stroke", (d) => {
-        if (d.risk_level === 'high') return 'hsl(var(--risk-high))';
-        if (d.risk_level === 'medium') return 'hsl(var(--risk-medium))';
-        return 'hsl(var(--slate-600))';
-      })
-      .attr("stroke-width", (d) => d.risk_level ? 3 : 1);
+      .attr("stroke", "hsl(var(--slate-600))")
+      .attr("stroke-width", 1);
 
     // Add labels to nodes
     node.append("text")

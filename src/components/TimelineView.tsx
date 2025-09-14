@@ -1,12 +1,12 @@
-import { TimelineEvent } from '@/lib/store';
+import { TimelineItem } from '@/lib/store';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Calendar, AlertTriangle, Eye, Archive, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface TimelineViewProps {
-  events: TimelineEvent[];
-  onEventClick?: (event: TimelineEvent) => void;
+  events: TimelineItem[];
+  onEventClick?: (event: TimelineItem) => void;
 }
 
 export function TimelineView({ events, onEventClick }: TimelineViewProps) {
@@ -41,7 +41,11 @@ export function TimelineView({ events, onEventClick }: TimelineViewProps) {
     }
   };
 
-  const sortedEvents = [...events].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const sortedEvents = [...events].sort((a, b) => {
+    const dateA = new Date(a.start_date || '1900-01-01').getTime();
+    const dateB = new Date(b.start_date || '1900-01-01').getTime(); 
+    return dateA - dateB;
+  });
 
   return (
     <div className="space-y-6">
@@ -52,16 +56,14 @@ export function TimelineView({ events, onEventClick }: TimelineViewProps) {
         {/* Events */}
         <div className="space-y-6">
           {sortedEvents.map((event, index) => (
-            <div key={event.id} className="relative flex items-start gap-4">
+            <div key={`${event.title}-${index}`} className="relative flex items-start gap-4">
               {/* Timeline dot */}
               <div className={cn(
                 "relative z-10 flex h-8 w-8 items-center justify-center rounded-full border-2 bg-background",
-                event.risk_level === 'high' ? 'border-risk-high bg-risk-high/10' :
-                event.risk_level === 'medium' ? 'border-risk-medium bg-risk-medium/10' :
                 'border-slate-600 bg-slate-800'
               )}>
-                <span className={getEventColor(event.type, event.risk_level)}>
-                  {getEventIcon(event.type)}
+                <span className="text-slate-400">
+                  <Calendar className="h-4 w-4" />
                 </span>
               </div>
 
@@ -77,37 +79,26 @@ export function TimelineView({ events, onEventClick }: TimelineViewProps) {
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
                       <h4 className="font-semibold text-slate-100 mb-1">
-                        {event.title}
+                        {event.title.replace(/_/g, ' ')}
                       </h4>
                       <p className="text-sm text-slate-400 mb-3">
-                        {event.description}
+                        {event.text}
                       </p>
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className="text-xs">
-                          {event.type}
+                          provenance
                         </Badge>
-                        {event.risk_level && (
-                          <Badge 
-                            variant={
-                              event.risk_level === 'high' ? 'destructive' :
-                              event.risk_level === 'medium' ? 'default' : 'secondary'
-                            }
-                            className="text-xs"
-                          >
-                            {event.risk_level} risk
-                          </Badge>
-                        )}
                       </div>
                     </div>
                     <div className="text-right">
                       <div className="text-sm font-medium text-slate-200">
-                        {new Date(event.date).getFullYear()}
+                        {event.start_date ? new Date(event.start_date).getFullYear() : 'Unknown'}
                       </div>
                       <div className="text-xs text-slate-500">
-                        {new Date(event.date).toLocaleDateString('en-US', { 
+                        {event.start_date ? new Date(event.start_date).toLocaleDateString('en-US', { 
                           month: 'short', 
                           day: 'numeric' 
-                        })}
+                        }) : ''}
                       </div>
                     </div>
                   </div>

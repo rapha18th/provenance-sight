@@ -23,14 +23,12 @@ export default function CaseFile() {
 
   const {
     currentCase,
-    networkData,
-    timeline,
-    evidence,
+    graphData,
+    timelineData,
     isLoadingCase,
     setCurrentCase,
-    setNetworkData,
-    setTimeline,
-    setEvidence,
+    setGraphData,
+    setTimelineData,
     setLoadingCase,
   } = useInvestigationStore();
 
@@ -45,11 +43,11 @@ export default function CaseFile() {
     setError('');
 
     try {
-      const caseData = await apiClient.getCaseFile(caseId);
+      const id = parseInt(caseId);
+      const caseData = await apiClient.getCaseFile(id);
       setCurrentCase(caseData.object);
-      setNetworkData(caseData.network);
-      setTimeline(caseData.timeline);
-      setEvidence(caseData.evidence);
+      setGraphData(caseData.graph);  
+      setTimelineData(caseData.timeline);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load case file');
     } finally {
@@ -111,21 +109,21 @@ export default function CaseFile() {
             {currentCase && (
               <div className="flex-1">
                 <h1 className="text-2xl font-bold text-slate-100">
-                  Case File: {currentCase.title}
+                  Case File: {currentCase.object.title}
                 </h1>
                 <div className="flex items-center gap-4 mt-1">
-                  {currentCase.creator && (
-                    <span className="text-sm text-slate-400">by {currentCase.creator}</span>
+                  {currentCase.object.creator && (
+                    <span className="text-sm text-slate-400">by {currentCase.object.creator}</span>
                   )}
-                  {currentCase.date && (
-                    <span className="text-sm text-slate-400">{currentCase.date}</span>
+                  {currentCase.object.date_display && (
+                    <span className="text-sm text-slate-400">{currentCase.object.date_display}</span>
                   )}
                   <Badge 
-                    variant={currentCase.risk_score >= 0.7 ? "destructive" : currentCase.risk_score >= 0.4 ? "default" : "secondary"}
+                    variant={currentCase.object.risk_score >= 0.7 ? "destructive" : currentCase.object.risk_score >= 0.3 ? "default" : "secondary"}
                     className="gap-1"
                   >
                     <AlertTriangle className="h-3 w-3" />
-                    {getRiskLabel(currentCase.risk_score)}
+                    {getRiskLabel(currentCase.object.risk_score)}
                   </Badge>
                 </div>
               </div>
@@ -169,34 +167,43 @@ export default function CaseFile() {
                       <div className="flex items-center gap-3">
                         <div className={cn(
                           "h-4 w-4 rounded-full",
-                          currentCase.risk_score >= 0.7 ? "bg-risk-high" :
-                          currentCase.risk_score >= 0.4 ? "bg-risk-medium" : "bg-risk-low"
+                          currentCase.object.risk_score >= 0.7 ? "bg-risk-high" :
+                          currentCase.object.risk_score >= 0.3 ? "bg-risk-medium" : "bg-risk-low"
                         )} />
-                        <span className={cn("font-semibold", getRiskColor(currentCase.risk_score))}>
-                          {Math.round(currentCase.risk_score * 100)}% Risk Score
+                        <span className={cn("font-semibold", getRiskColor(currentCase.object.risk_score))}>
+                          {Math.round(currentCase.object.risk_score * 100)}% Risk Score
                         </span>
                       </div>
                     </div>
                     <div>
                       <h4 className="font-semibold text-slate-200 mb-2">Source</h4>
-                      <p className="text-slate-400">{currentCase.source}</p>
+                      <p className="text-slate-400">{currentCase.object.source}</p>
                     </div>
                   </div>
-                  
-                  {currentCase.description && (
-                    <div>
-                      <h4 className="font-semibold text-slate-200 mb-2">Description</h4>
-                      <p className="text-slate-400">{currentCase.description}</p>
-                    </div>
-                  )}
 
                   <div>
-                    <h4 className="font-semibold text-slate-200 mb-2">Flags</h4>
+                    <h4 className="font-semibold text-slate-200 mb-2">Risk Factors</h4>
                     <div className="flex flex-wrap gap-2">
-                      {currentCase.flags.map((flag, index) => (
+                      {currentCase.risks.map((risk, index) => (
                         <Badge key={index} variant="outline">
-                          {flag}
+                          {risk.code.replace(/_/g, ' ')}
                         </Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="font-semibold text-slate-200 mb-2">Provenance Events</h4>
+                    <div className="space-y-2">
+                      {currentCase.events.slice(0, 3).map((event, index) => (
+                        <div key={index} className="p-3 bg-slate-800/50 rounded-lg">
+                          <div className="font-medium text-slate-200">{event.event_type}</div>
+                          <div className="text-sm text-slate-400">
+                            {event.actor && <span>{event.actor}</span>}
+                            {event.place && <span> • {event.place}</span>}
+                            {event.date_from && <span> • {event.date_from}</span>}
+                          </div>
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -210,10 +217,10 @@ export default function CaseFile() {
                   <CardTitle className="text-slate-100">Relationship Network</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
-                  {networkData ? (
+                  {graphData ? (
                     <NetworkGraph
-                      nodes={networkData.nodes}
-                      edges={networkData.edges}
+                      nodes={graphData.nodes}
+                      edges={graphData.edges}
                       height={600}
                     />
                   ) : (
@@ -231,7 +238,13 @@ export default function CaseFile() {
                   <CardTitle className="text-slate-100">Provenance Timeline</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <TimelineView events={timeline} />
+                  {timelineData ? (
+                    <TimelineView events={timelineData.items} />
+                  ) : (
+                    <div className="text-center py-8 text-slate-400">
+                      No timeline data available
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -242,33 +255,21 @@ export default function CaseFile() {
                   <CardTitle className="text-slate-100">Evidence & Documentation</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {evidence.length > 0 ? (
-                    evidence.map((item) => (
-                      <Card key={item.id} className="bg-slate-800/50 border-slate-600">
+                  {currentCase && currentCase.sentences.length > 0 ? (
+                    currentCase.sentences.map((sentence) => (
+                      <Card key={sentence.seq} className="bg-slate-800/50 border-slate-600">
                         <CardContent className="p-4">
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex-1">
-                              <p className="text-slate-300 mb-2">{item.text}</p>
+                              <p className="text-slate-300 mb-2">{sentence.sentence}</p>
                               <div className="flex items-center gap-4">
-                                <Badge 
-                                  variant={
-                                    item.confidence === 'high' ? 'destructive' :
-                                    item.confidence === 'medium' ? 'default' : 'secondary'
-                                  }
-                                  className="text-xs"
-                                >
-                                  {item.confidence} confidence
-                                </Badge>
-                                <span className="text-xs text-slate-500">{item.source}</span>
-                                {item.date && (
-                                  <span className="text-xs text-slate-500">{item.date}</span>
-                                )}
+                                <span className="text-xs text-slate-500">Sentence #{sentence.seq}</span>
                               </div>
                             </div>
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleExplainEvidence(item.text)}
+                              onClick={() => handleExplainEvidence(sentence.sentence)}
                               className="gap-2"
                             >
                               <Sparkles className="h-3 w-3" />
@@ -294,9 +295,9 @@ export default function CaseFile() {
         isOpen={showExplainModal}
         onClose={() => setShowExplainModal(false)}
         type={explainText ? 'text' : 'object'}
-        objectId={explainText ? undefined : id}
+        objectId={explainText ? undefined : parseInt(id || '0')}
         text={explainText || undefined}
-        title={currentCase?.title}
+        title={currentCase?.object.title}
       />
     </div>
   );

@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { SimilarResult } from '@/lib/store';
+import { Badge } from '@/components/ui/badge';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, ArrowLeft, Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -61,11 +63,13 @@ export default function PatternSearch() {
     setHasSearched(true);
 
     try {
-      const results = await apiClient.searchSimilar(
-        searchQuery,
-        selectedSources.length > 0 ? selectedSources : undefined
-      );
-      setSearchResults(results);
+      const response = await apiClient.findSimilar({
+        text: searchQuery,
+        limit: 20,
+        candidates: 200,
+        source: selectedSources.length > 0 ? selectedSources[0] : undefined
+      });
+      setSearchResults(response);
     } catch (error) {
       console.error('Search failed:', error);
       setSearchResults([]);
@@ -84,8 +88,8 @@ export default function PatternSearch() {
     performSearch(sampleQuery);
   };
 
-  const handleLeadClick = (lead: any) => {
-    navigate(`/object/${lead.id}`);
+  const handleLeadClick = (result: SimilarResult) => {
+    navigate(`/object/${result.object_id}`);
   };
 
   const handleSourceToggle = (source: string) => {
@@ -232,13 +236,42 @@ export default function PatternSearch() {
                 ))}
               </div>
             ) : searchResults.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              <div className="space-y-4">
                 {searchResults.map((result) => (
-                  <LeadCard
-                    key={result.id}
-                    lead={result}
+                  <Card
+                    key={`${result.object_id}-${result.seq}`}
+                    className="cursor-pointer transition-all duration-200 hover:shadow-glow hover:border-primary/30 bg-card border-slate-700"
                     onClick={() => handleLeadClick(result)}
-                  />
+                  >
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <h3 className="text-lg font-semibold text-slate-100 mb-2">
+                            {result.title}
+                          </h3>
+                          {result.creator && (
+                            <p className="text-sm text-slate-400 mb-2">
+                              by {result.creator}
+                            </p>
+                          )}
+                          <p className="text-slate-300 mb-3">
+                            "{result.sentence}"
+                          </p>
+                          <div className="flex items-center gap-4">
+                            <Badge variant="outline" className="text-xs">
+                              {result.source}
+                            </Badge>
+                            <span className="text-xs text-slate-500">
+                              Similarity: {Math.round((1 - result.distance) * 100)}%
+                            </span>
+                            <span className="text-xs text-slate-500">
+                              ID: {result.object_id}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
                 ))}
               </div>
             ) : (

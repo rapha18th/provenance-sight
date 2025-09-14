@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Lead } from '@/lib/store';
 import { useNavigate } from 'react-router-dom';
 import { SearchHeader } from '@/components/SearchHeader';
 import { LeadCard } from '@/components/LeadCard';
@@ -59,8 +60,8 @@ export default function Dashboard() {
     }
   };
 
-  const handleLeadClick = (lead: any) => {
-    navigate(`/object/${lead.id}`);
+  const handleLeadClick = (lead: Lead) => {
+    navigate(`/object/${lead.object_id}`);
   };
 
   const handleSearch = (query: string) => {
@@ -118,7 +119,7 @@ export default function Dashboard() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {leads.map((lead) => (
                 <LeadCard
-                  key={lead.id}
+                  key={lead.object_id}
                   lead={lead}
                   onClick={() => handleLeadClick(lead)}
                 />

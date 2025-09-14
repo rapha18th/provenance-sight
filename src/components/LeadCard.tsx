@@ -12,19 +12,22 @@ interface LeadCardProps {
 export function LeadCard({ lead, onClick }: LeadCardProps) {
   const getRiskColor = (score: number) => {
     if (score >= 0.7) return 'risk-high';
-    if (score >= 0.4) return 'risk-medium';
+    if (score >= 0.3) return 'risk-medium';
     return 'risk-low';
   };
 
   const getRiskLabel = (score: number) => {
     if (score >= 0.7) return 'High Risk';
-    if (score >= 0.4) return 'Medium Risk';
+    if (score >= 0.3) return 'Medium Risk';
     return 'Low Risk';
   };
 
   const formatRiskScore = (score: number) => {
     return Math.round(score * 100);
   };
+
+  // Parse comma-separated signals into array
+  const signals = lead.top_signals ? lead.top_signals.split(',').map(s => s.trim()) : [];
 
   return (
     <Card 
@@ -47,19 +50,16 @@ export function LeadCard({ lead, onClick }: LeadCardProps) {
                 {lead.creator}
               </div>
             )}
-            {lead.date && (
-              <div className="flex items-center gap-1 mt-1 text-sm text-slate-400">
-                <Calendar className="h-3 w-3" />
-                {lead.date}
-              </div>
-            )}
+            <div className="flex items-center gap-1 mt-1 text-sm text-slate-400">
+              <span>ID: {lead.object_id}</span>
+            </div>
           </div>
           
           <div className="flex flex-col items-end gap-2">
             <div className={cn(
               "h-3 w-3 rounded-full",
               lead.risk_score >= 0.7 ? "bg-risk-high shadow-glow" : 
-              lead.risk_score >= 0.4 ? "bg-risk-medium" : "bg-risk-low"
+              lead.risk_score >= 0.3 ? "bg-risk-medium" : "bg-risk-low"
             )} />
             <span className="text-xs text-slate-400">
               {formatRiskScore(lead.risk_score)}%
@@ -72,16 +72,16 @@ export function LeadCard({ lead, onClick }: LeadCardProps) {
           <Eye className="h-8 w-8 text-slate-500" />
         </div>
 
-        {/* Flags */}
+        {/* Signals */}
         <div className="flex flex-wrap gap-2 mb-4">
-          {lead.flags.slice(0, 3).map((flag, index) => (
+          {signals.slice(0, 3).map((signal, index) => (
             <Badge key={index} variant="secondary" className="text-xs">
-              {flag}
+              {signal.replace(/_/g, ' ')}
             </Badge>
           ))}
-          {lead.flags.length > 3 && (
+          {signals.length > 3 && (
             <Badge variant="outline" className="text-xs">
-              +{lead.flags.length - 3} more
+              +{signals.length - 3} more
             </Badge>
           )}
         </div>
@@ -90,7 +90,7 @@ export function LeadCard({ lead, onClick }: LeadCardProps) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Badge 
-              variant={lead.risk_score >= 0.7 ? "destructive" : lead.risk_score >= 0.4 ? "default" : "secondary"}
+              variant={lead.risk_score >= 0.7 ? "destructive" : lead.risk_score >= 0.3 ? "default" : "secondary"}
               className="gap-1"
             >
               <AlertTriangle className="h-3 w-3" />

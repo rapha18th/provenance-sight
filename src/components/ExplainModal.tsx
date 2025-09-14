@@ -9,7 +9,7 @@ interface ExplainModalProps {
   isOpen: boolean;
   onClose: () => void;
   type: 'object' | 'text';
-  objectId?: string;
+  objectId?: number;
   text?: string;
   title?: string;
 }

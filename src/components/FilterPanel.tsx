@@ -17,14 +17,14 @@ interface FilterPanelProps {
 }
 
 const DEFAULT_SOURCES = [
-  'Getty Research Institute',
-  'National Archives',
-  'Smithsonian Institution',
-  'Library of Congress',
-  'Metropolitan Museum of Art',
-  'British Museum',
-  'Louvre',
-  'Museum of Modern Art'
+  'AIC',
+  'CMA',
+  'MET',
+  'MOMA',
+  'LACMA',
+  'NGA',
+  'SFMOMA',
+  'Getty'
 ];
 
 export function FilterPanel({ 
@@ -34,36 +34,33 @@ export function FilterPanel({
   onToggle, 
   availableSources = DEFAULT_SOURCES 
 }: FilterPanelProps) {
-  const [riskThreshold, setRiskThreshold] = useState([filters.risk_threshold || 0]);
-  const [selectedSources, setSelectedSources] = useState<string[]>(filters.sources || []);
+  const [minScore, setMinScore] = useState([filters.min_score || 0.3]);
+  const [selectedSource, setSelectedSource] = useState<string>(filters.source || '');
 
-  const handleRiskThresholdChange = (value: number[]) => {
-    setRiskThreshold(value);
+  const handleMinScoreChange = (value: number[]) => {
+    setMinScore(value);
     onFiltersChange({
       ...filters,
-      risk_threshold: value[0],
+      min_score: value[0],
     });
   };
 
-  const handleSourceToggle = (source: string) => {
-    const newSources = selectedSources.includes(source)
-      ? selectedSources.filter(s => s !== source)
-      : [...selectedSources, source];
-    
-    setSelectedSources(newSources);
+  const handleSourceChange = (source: string) => {
+    const newSource = selectedSource === source ? '' : source;
+    setSelectedSource(newSource);
     onFiltersChange({
       ...filters,
-      sources: newSources.length > 0 ? newSources : undefined,
+      source: newSource || undefined,
     });
   };
 
   const clearFilters = () => {
-    setRiskThreshold([0]);
-    setSelectedSources([]);
-    onFiltersChange({});
+    setMinScore([0.3]);
+    setSelectedSource('');
+    onFiltersChange({ limit: 50, min_score: 0.3 });
   };
 
-  const hasActiveFilters = filters.risk_threshold !== undefined || (filters.sources && filters.sources.length > 0);
+  const hasActiveFilters = filters.min_score !== 0.3 || filters.source;
 
   if (!isOpen) {
     return (
@@ -104,27 +101,27 @@ export function FilterPanel({
       </CardHeader>
 
       <CardContent className="space-y-6">
-        {/* Risk Threshold */}
+        {/* Risk Score Threshold */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <label className="text-sm font-medium text-slate-200">
-              Risk Threshold
+              Minimum Risk Score
             </label>
             <span className="text-sm text-slate-400">
-              {Math.round(riskThreshold[0] * 100)}%+
+              {Math.round(minScore[0] * 100)}%+
             </span>
           </div>
           <Slider
-            value={riskThreshold}
-            onValueChange={handleRiskThresholdChange}
+            value={minScore}
+            onValueChange={handleMinScoreChange}
             max={1}
             min={0}
             step={0.1}
             className="w-full"
           />
           <div className="flex justify-between text-xs text-slate-500">
-            <span>Low Risk</span>
-            <span>High Risk</span>
+            <span>Low Risk (0%)</span>
+            <span>High Risk (100%)</span>
           </div>
         </div>
 
@@ -133,7 +130,7 @@ export function FilterPanel({
           <CollapsibleTrigger asChild>
             <Button variant="ghost" className="w-full justify-between p-0 h-auto">
               <span className="text-sm font-medium text-slate-200">
-                Sources ({selectedSources.length} selected)
+                Source ({selectedSource ? '1 selected' : 'All sources'})
               </span>
               <ChevronDown className="h-4 w-4" />
             </Button>
@@ -143,8 +140,8 @@ export function FilterPanel({
               <div key={source} className="flex items-center space-x-2">
                 <Checkbox
                   id={source}
-                  checked={selectedSources.includes(source)}
-                  onCheckedChange={() => handleSourceToggle(source)}
+                  checked={selectedSource === source}
+                  onCheckedChange={() => handleSourceChange(source)}
                 />
                 <label
                   htmlFor={source}

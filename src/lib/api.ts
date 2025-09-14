@@ -1,6 +1,17 @@
-import { Lead, CaseObject, NetworkNode, NetworkEdge, TimelineEvent, Evidence, HealthStats, LeadFilters } from './store';
+import { 
+  Lead, 
+  LeadFilters, 
+  HealthResponse, 
+  LeadsResponse, 
+  ObjectResponse, 
+  GraphResponse, 
+  TimelineResponse, 
+  SimilarResponse, 
+  SimilarResult, 
+  ExplainResponse 
+} from './store';
 
-class ApiClient {
+class ProvenanceAPI {
   private baseUrl: string;
 
   constructor() {
@@ -23,91 +34,112 @@ class ApiClient {
         throw new Error(`API request failed: ${response.status} ${response.statusText}`);
       }
 
-      return await response.json();
+      const data = await response.json();
+      
+      // Check if API returned an error response
+      if (data.ok === false) {
+        throw new Error(data.error || 'API returned error');
+      }
+
+      return data;
     } catch (error) {
       console.error(`API Error for ${endpoint}:`, error);
       throw error;
     }
   }
 
-  async getHealth(): Promise<HealthStats> {
-    return this.request<HealthStats>('/api/health');
+  // Health check
+  async getHealth(): Promise<HealthResponse> {
+    return this.request<HealthResponse>('/api/health');
   }
 
+  // Leads list with filters
   async getLeads(filters?: LeadFilters): Promise<Lead[]> {
     const params = new URLSearchParams();
     
-    if (filters?.sources?.length) {
-      params.append('sources', filters.sources.join(','));
+    if (filters?.limit) {
+      params.append('limit', filters.limit.toString());
     }
-    if (filters?.risk_threshold !== undefined) {
-      params.append('risk_threshold', filters.risk_threshold.toString());
+    if (filters?.min_score !== undefined) {
+      params.append('min_score', filters.min_score.toString());
     }
-    if (filters?.search) {
-      params.append('search', filters.search);
+    if (filters?.source) {
+      params.append('source', filters.source);
     }
 
     const endpoint = `/api/leads${params.toString() ? `?${params.toString()}` : ''}`;
-    return this.request<Lead[]>(endpoint);
+    const response = await this.request<LeadsResponse>(endpoint);
+    
+    // Apply client-side text filtering if needed
+    let leads = response.data;
+    if (filters?.search) {
+      const searchLower = filters.search.toLowerCase();
+      leads = leads.filter(lead => 
+        lead.title.toLowerCase().includes(searchLower) ||
+        lead.creator?.toLowerCase().includes(searchLower)
+      );
+    }
+    
+    return leads;
   }
 
-  async getCaseObject(id: string): Promise<CaseObject> {
-    return this.request<CaseObject>(`/api/object/${id}`);
+  // Object details
+  async getObject(id: number): Promise<ObjectResponse> {
+    return this.request<ObjectResponse>(`/api/object/${id}`);
   }
 
-  async getCaseNetwork(id: string): Promise<{ nodes: NetworkNode[]; edges: NetworkEdge[] }> {
-    return this.request<{ nodes: NetworkNode[]; edges: NetworkEdge[] }>(`/api/object/${id}/network`);
+  // Graph data for visualization
+  async getGraph(id: number): Promise<GraphResponse> {
+    return this.request<GraphResponse>(`/api/graph/${id}`);
   }
 
-  async getCaseTimeline(id: string): Promise<TimelineEvent[]> {
-    return this.request<TimelineEvent[]>(`/api/object/${id}/timeline`);
+  // Timeline data
+  async getTimeline(id: number): Promise<TimelineResponse> {
+    return this.request<TimelineResponse>(`/api/timeline/${id}`);
   }
 
-  async getCaseEvidence(id: string): Promise<Evidence[]> {
-    return this.request<Evidence[]>(`/api/object/${id}/evidence`);
-  }
-
-  async getCaseFile(id: string): Promise<{
-    object: CaseObject;
-    network: { nodes: NetworkNode[]; edges: NetworkEdge[] };
-    timeline: TimelineEvent[];
-    evidence: Evidence[];
+  // Load complete case file
+  async getCaseFile(id: number): Promise<{
+    object: ObjectResponse;
+    graph: GraphResponse;
+    timeline: TimelineResponse;
   }> {
     // Parallel fetch for efficiency
-    const [object, network, timeline, evidence] = await Promise.all([
-      this.getCaseObject(id),
-      this.getCaseNetwork(id),
-      this.getCaseTimeline(id),
-      this.getCaseEvidence(id),
+    const [object, graph, timeline] = await Promise.all([
+      this.getObject(id),
+      this.getGraph(id),
+      this.getTimeline(id),
     ]);
 
-    return { object, network, timeline, evidence };
+    return { object, graph, timeline };
   }
 
-  async explainObject(id: string): Promise<{ explanation: string }> {
-    return this.request<{ explanation: string }>(`/api/explain/object/${id}`, {
+  // Semantic search
+  async findSimilar(params: {
+    text: string;
+    limit?: number;
+    candidates?: number;
+    source?: string;
+  }): Promise<SimilarResult[]> {
+    const response = await this.request<SimilarResponse>('/api/similar', {
       method: 'POST',
+      body: JSON.stringify(params),
     });
+    
+    return response.data;
   }
 
-  async explainText(text: string): Promise<{ explanation: string }> {
-    return this.request<{ explanation: string }>('/api/explain/text', {
+  // AI explanations
+  async explainObject(id: number): Promise<ExplainResponse> {
+    return this.request<ExplainResponse>(`/api/explain/object/${id}`);
+  }
+
+  async explainText(text: string): Promise<ExplainResponse> {
+    return this.request<ExplainResponse>('/api/explain/text', {
       method: 'POST',
       body: JSON.stringify({ text }),
     });
   }
-
-  async searchSimilar(query: string, sources?: string[]): Promise<Lead[]> {
-    const body: any = { query };
-    if (sources?.length) {
-      body.sources = sources;
-    }
-
-    return this.request<Lead[]>('/api/search', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    });
-  }
 }
 
-export const apiClient = new ApiClient();
+export const apiClient = new ProvenanceAPI();
