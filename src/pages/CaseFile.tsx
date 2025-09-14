@@ -111,11 +111,15 @@ export default function CaseFile() {
     try {
       const id = parseInt(caseId);
       const caseData = await apiClient.getCaseFile(id);
-      setCurrentCase(caseData);
 
-      const augmentedGraph = augmentGraphData(caseData.graph, caseData);
+      // Set the main case object data
+      setCurrentCase(caseData.object);
+
+      // Augment graph data and then set it
+      const augmentedGraph = augmentGraphData(caseData.graph, caseData.object);
       setGraphData(augmentedGraph);
 
+      // Set the timeline data
       setTimelineData(caseData.timeline);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load case file');
@@ -270,7 +274,7 @@ export default function CaseFile() {
                   <div>
                     <h4 className="font-semibold text-slate-200 mb-2">Provenance Events</h4>
                     <div className="space-y-2">
-                      {currentCase.events.slice(0, 3).map((event, index) => (
+                      {currentCase.events && currentCase.events.slice(0, 3).map((event, index) => (
                         <div key={index} className="p-3 bg-slate-800/50 rounded-lg">
                           <div className="font-medium text-slate-200">{event.event_type}</div>
                           <div className="text-sm text-slate-400">
