@@ -19,6 +19,21 @@ export default {
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+        
+        /* Investigation Theme Colors */
+        slate: {
+          900: "hsl(var(--slate-900))",
+          800: "hsl(var(--slate-800))",
+          700: "hsl(var(--slate-700))",
+          600: "hsl(var(--slate-600))",
+          500: "hsl(var(--slate-500))",
+          400: "hsl(var(--slate-400))",
+          300: "hsl(var(--slate-300))",
+          200: "hsl(var(--slate-200))",
+          100: "hsl(var(--slate-100))",
+        },
+        
+        /* Semantic colors */
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
@@ -30,6 +45,10 @@ export default {
         destructive: {
           DEFAULT: "hsl(var(--destructive))",
           foreground: "hsl(var(--destructive-foreground))",
+        },
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
         },
         muted: {
           DEFAULT: "hsl(var(--muted))",
@@ -47,16 +66,40 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        sidebar: {
-          DEFAULT: "hsl(var(--sidebar-background))",
-          foreground: "hsl(var(--sidebar-foreground))",
-          primary: "hsl(var(--sidebar-primary))",
-          "primary-foreground": "hsl(var(--sidebar-primary-foreground))",
-          accent: "hsl(var(--sidebar-accent))",
-          "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
-          border: "hsl(var(--sidebar-border))",
-          ring: "hsl(var(--sidebar-ring))",
+        
+        /* Investigation specific colors */
+        risk: {
+          high: "hsl(var(--risk-high))",
+          medium: "hsl(var(--risk-medium))",
+          low: "hsl(var(--risk-low))",
         },
+        evidence: {
+          strong: "hsl(var(--evidence-strong))",
+          moderate: "hsl(var(--evidence-moderate))",
+          weak: "hsl(var(--evidence-weak))",
+        },
+        node: {
+          object: "hsl(var(--node-object))",
+          person: "hsl(var(--node-person))",
+          place: "hsl(var(--node-place))",
+          event: "hsl(var(--node-event))",
+        },
+        edge: {
+          nazi: "hsl(var(--edge-nazi))",
+          unesco: "hsl(var(--edge-unesco))",
+          normal: "hsl(var(--edge-normal))",
+        },
+      },
+      backgroundImage: {
+        'gradient-investigation': 'var(--gradient-investigation)',
+        'gradient-danger': 'var(--gradient-danger)',
+        'gradient-warning': 'var(--gradient-warning)',
+        'gradient-safe': 'var(--gradient-safe)',
+      },
+      boxShadow: {
+        'card': 'var(--shadow-card)',
+        'modal': 'var(--shadow-modal)',
+        'glow': 'var(--shadow-glow)',
       },
       borderRadius: {
         lg: "var(--radius)",

@@ -2,95 +2,125 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
+/* Provenance Radar Design System - Dark Investigation Theme
+All colors MUST be HSL for proper theming
 */
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Base colors - Light mode fallback */
+    --background: 220 13% 18%;
+    --foreground: 210 20% 95%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    /* Investigation Dashboard Colors */
+    --slate-900: 220 13% 18%;
+    --slate-800: 215 28% 17%;
+    --slate-700: 217 19% 27%;
+    --slate-600: 215 14% 34%;
+    --slate-500: 220 9% 46%;
+    --slate-400: 218 11% 65%;
+    --slate-300: 216 12% 84%;
+    --slate-200: 210 16% 93%;
+    --slate-100: 210 20% 98%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    /* Accent colors for investigation states */
+    --amber-500: 45 93% 47%;      /* Warning/Alert signals */
+    --amber-400: 43 96% 56%;      /* Hover states */
+    --red-500: 0 84% 60%;         /* High risk/danger */
+    --red-400: 0 91% 71%;         /* Hover danger */
+    --emerald-500: 142 71% 45%;   /* Safe/verified */
+    --emerald-400: 142 77% 58%;   /* Hover safe */
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Semantic tokens */
+    --background: var(--slate-900);
+    --foreground: var(--slate-100);
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --card: var(--slate-800);
+    --card-foreground: var(--slate-100);
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --popover: var(--slate-800);
+    --popover-foreground: var(--slate-100);
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --primary: var(--amber-500);
+    --primary-foreground: var(--slate-900);
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --secondary: var(--slate-700);
+    --secondary-foreground: var(--slate-100);
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --muted: var(--slate-700);
+    --muted-foreground: var(--slate-400);
 
-    --radius: 0.5rem;
+    --accent: var(--amber-500);
+    --accent-foreground: var(--slate-900);
 
-    --sidebar-background: 0 0% 98%;
+    --destructive: var(--red-500);
+    --destructive-foreground: var(--slate-100);
 
-    --sidebar-foreground: 240 5.3% 26.1%;
+    --success: var(--emerald-500);
+    --success-foreground: var(--slate-100);
 
-    --sidebar-primary: 240 5.9% 10%;
+    --border: var(--slate-700);
+    --input: var(--slate-700);
+    --ring: var(--amber-500);
 
-    --sidebar-primary-foreground: 0 0% 98%;
+    --radius: 0.75rem;
 
-    --sidebar-accent: 240 4.8% 95.9%;
+    /* Investigation specific colors */
+    --risk-high: var(--red-500);
+    --risk-medium: var(--amber-500);
+    --risk-low: var(--emerald-500);
 
-    --sidebar-accent-foreground: 240 5.9% 10%;
+    --evidence-strong: var(--red-400);
+    --evidence-moderate: var(--amber-400); 
+    --evidence-weak: var(--slate-500);
 
-    --sidebar-border: 220 13% 91%;
+    /* Network visualization colors */
+    --node-object: var(--amber-500);
+    --node-person: var(--slate-400);
+    --node-place: var(--emerald-400);
+    --node-event: var(--red-400);
 
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --edge-nazi: var(--red-500);
+    --edge-unesco: var(--amber-500);
+    --edge-normal: var(--slate-500);
+
+    /* Gradients */
+    --gradient-investigation: linear-gradient(135deg, hsl(var(--slate-900)), hsl(var(--slate-800)));
+    --gradient-danger: linear-gradient(135deg, hsl(var(--red-500) / 0.1), hsl(var(--red-500) / 0.05));
+    --gradient-warning: linear-gradient(135deg, hsl(var(--amber-500) / 0.1), hsl(var(--amber-500) / 0.05));
+    --gradient-safe: linear-gradient(135deg, hsl(var(--emerald-500) / 0.1), hsl(var(--emerald-500) / 0.05));
+
+    /* Shadows for depth */
+    --shadow-card: 0 4px 6px -1px hsl(var(--slate-900) / 0.3), 0 2px 4px -1px hsl(var(--slate-900) / 0.2);
+    --shadow-modal: 0 20px 25px -5px hsl(var(--slate-900) / 0.4), 0 10px 10px -5px hsl(var(--slate-900) / 0.2);
+    --shadow-glow: 0 0 20px hsl(var(--amber-500) / 0.3);
+
+    /* Transitions */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-quick: all 0.15s ease-out;
   }
 
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+  /* Dark mode is default - no .dark class needed */
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+  /* Custom scrollbars */
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+  ::-webkit-scrollbar-track {
+    @apply bg-slate-800;
+  }
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-600 rounded-full;
+  }
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-500;
   }
 }
 
