@@ -36,10 +36,11 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
         throw new Error('Invalid explanation request');
       }
 
-      if (result.note) {
-        setExplanation(result.note);
-      } else if (result.explanation) {
-        setExplanation(result.explanation);
+      const explanationText = result.note || result.explanation;
+      if (explanationText) {
+        setExplanation(explanationText);
+      } else {
+        setExplanation('No explanation could be generated for this item.');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to get explanation');

@@ -259,7 +259,7 @@ export default function CaseFile() {
                   <div>
                     <h4 className="font-semibold text-slate-200 mb-2">Risk Factors</h4>
                     <div className="flex flex-wrap gap-2">
-                      {currentCase.risks.map((risk, index) => (
+                      {currentCase.risks && currentCase.risks.map((risk, index) => (
                         <Badge key={index} variant="outline">
                           {risk.code.replace(/_/g, ' ')}
                         </Badge>
