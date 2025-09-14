@@ -9,80 +9,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { NetworkGraph } from '@/components/NetworkGraph';
 import { TimelineView } from '@/components/TimelineView';
 import { ExplainModal } from '@/components/ExplainModal';
-import { useInvestigationStore, GraphResponse, ObjectResponse, NetworkNode, NetworkEdge } from '@/lib/store';
+import { useInvestigationStore } from '@/lib/store';
 import { apiClient } from '@/lib/api';
-
-const augmentGraphData = (graph: GraphResponse | null, caseFile: ObjectResponse | null): GraphResponse | null => {
-  if (!graph || !caseFile || !caseFile.events) {
-    return graph;
-  }
-
-  // Check if augmentation is needed (only one object node, no edges)
-  if (graph.edges.length > 0 || graph.nodes.length > 1 || caseFile.events.length === 0) {
-    return graph;
-  }
-
-  const newNodes: NetworkNode[] = [...graph.nodes];
-  const newEdges: NetworkEdge[] = [...graph.edges];
-  const nodeIds = new Set(newNodes.map(n => n.id));
-
-  const objectNode = newNodes.find(n => n.type === 'object');
-  if (!objectNode) return graph;
-
-  caseFile.events.forEach((event, index) => {
-    const actorId = event.actor ? `actor:${event.actor}` : null;
-    const placeId = event.place ? `place:${event.place}` : null;
-
-    if (actorId && !nodeIds.has(actorId)) {
-      newNodes.push({ id: actorId, label: event.actor!, type: 'actor' });
-      nodeIds.add(actorId);
-    }
-
-    if (placeId && !nodeIds.has(placeId)) {
-      newNodes.push({ id: placeId, label: event.place!, type: 'place' });
-      nodeIds.add(placeId);
-    }
-
-    if (actorId) {
-      newEdges.push({
-        id: `edge:${objectNode.id}-${actorId}-${index}`,
-        source: objectNode.id,
-        target: actorId,
-        label: event.event_type,
-        date: event.date_from,
-        policy: [],
-        source_ref: event.source_ref
-      });
-    }
-
-    if (placeId) {
-       newEdges.push({
-        id: `edge:${objectNode.id}-${placeId}-event-${index}`,
-        source: objectNode.id,
-        target: placeId,
-        label: event.event_type,
-        date: event.date_from,
-        policy: [],
-        source_ref: event.source_ref
-      });
-    }
-
-    // Connect actor to place if both exist
-    if (actorId && placeId) {
-      newEdges.push({
-        id: `edge:${actorId}-${placeId}-${index}`,
-        source: actorId,
-        target: placeId,
-        label: 'occurred in',
-        date: event.date_from,
-        policy: [],
-        source_ref: event.source_ref
-      });
-    }
-  });
-
-  return { ok: true, nodes: newNodes, edges: newEdges };
-};
 import { cn } from '@/lib/utils';
 
 export default function CaseFile() {
@@ -111,22 +39,15 @@ export default function CaseFile() {
     try {
       const id = parseInt(caseId);
       const caseData = await apiClient.getCaseFile(id);
-
-      // Set the main case object data
       setCurrentCase(caseData.object);
-
-      // Augment graph data and then set it
-      const augmentedGraph = augmentGraphData(caseData.graph, caseData.object);
-      setGraphData(augmentedGraph);
-
-      // Set the timeline data
+      setGraphData(caseData.graph);
       setTimelineData(caseData.timeline);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load case file');
     } finally {
       setLoadingCase(false);
     }
-  }, [setLoadingCase, setError, setCurrentCase, setGraphData, setTimelineData]);
+  }, [setCurrentCase, setGraphData, setTimelineData, setLoadingCase, setError]);
 
   useEffect(() => {
     if (id) {
@@ -239,51 +160,66 @@ export default function CaseFile() {
                 <CardHeader>
                   <CardTitle className="text-slate-100">Case Summary</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <h4 className="font-semibold text-slate-200 mb-2">Risk Assessment</h4>
-                      <div className="flex items-center gap-3">
-                        <div className={cn(
-                          "h-4 w-4 rounded-full",
-                          currentCase.object.risk_score >= 0.7 ? "bg-risk-high" :
-                          currentCase.object.risk_score >= 0.3 ? "bg-risk-medium" : "bg-risk-low"
-                        )} />
-                        <span className={cn("font-semibold", getRiskColor(currentCase.object.risk_score))}>
-                          {Math.round(currentCase.object.risk_score * 100)}% Risk Score
-                        </span>
-                      </div>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    {/* Image Column */}
+                    <div className="md:col-span-1">
+                      <img
+                        src={currentCase.object.image_url || '/placeholder.svg'}
+                        alt={`Image of ${currentCase.object.title}`}
+                        className="w-full h-auto rounded-lg object-cover aspect-square"
+                        onError={(e) => { e.currentTarget.src = '/placeholder.svg'; }}
+                      />
                     </div>
-                    <div>
-                      <h4 className="font-semibold text-slate-200 mb-2">Source</h4>
-                      <p className="text-slate-400">{currentCase.object.source}</p>
-                    </div>
-                  </div>
 
-                  <div>
-                    <h4 className="font-semibold text-slate-200 mb-2">Risk Factors</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {currentCase.risks && currentCase.risks.map((risk, index) => (
-                        <Badge key={index} variant="outline">
-                          {risk.code.replace(/_/g, ' ')}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-semibold text-slate-200 mb-2">Provenance Events</h4>
-                    <div className="space-y-2">
-                      {currentCase.events && currentCase.events.slice(0, 3).map((event, index) => (
-                        <div key={index} className="p-3 bg-slate-800/50 rounded-lg">
-                          <div className="font-medium text-slate-200">{event.event_type}</div>
-                          <div className="text-sm text-slate-400">
-                            {event.actor && <span>{event.actor}</span>}
-                            {event.place && <span> • {event.place}</span>}
-                            {event.date_from && <span> • {event.date_from}</span>}
+                    {/* Details Column */}
+                    <div className="md:col-span-2 space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <h4 className="font-semibold text-slate-200 mb-2">Risk Assessment</h4>
+                          <div className="flex items-center gap-3">
+                            <div className={cn(
+                              "h-4 w-4 rounded-full",
+                              currentCase.object.risk_score >= 0.7 ? "bg-risk-high" :
+                              currentCase.object.risk_score >= 0.3 ? "bg-risk-medium" : "bg-risk-low"
+                            )} />
+                            <span className={cn("font-semibold", getRiskColor(currentCase.object.risk_score))}>
+                              {Math.round(currentCase.object.risk_score * 100)}% Risk Score
+                            </span>
                           </div>
                         </div>
-                      ))}
+                        <div>
+                          <h4 className="font-semibold text-slate-200 mb-2">Source</h4>
+                          <p className="text-slate-400">{currentCase.object.source}</p>
+                        </div>
+                      </div>
+
+                      <div>
+                        <h4 className="font-semibold text-slate-200 mb-2">Risk Factors</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {currentCase.risks && currentCase.risks.map((risk, index) => (
+                            <Badge key={index} variant="outline">
+                              {risk.code.replace(/_/g, ' ')}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <h4 className="font-semibold text-slate-200 mb-2">Provenance Events</h4>
+                        <div className="space-y-2">
+                          {currentCase.events && currentCase.events.slice(0, 3).map((event, index) => (
+                            <div key={index} className="p-3 bg-slate-800/50 rounded-lg">
+                              <div className="font-medium text-slate-200">{event.event_type}</div>
+                              <div className="text-sm text-slate-400">
+                                {event.actor && <span>{event.actor}</span>}
+                                {event.place && <span> • {event.place}</span>}
+                                {event.date_from && <span> • {event.date_from}</span>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </CardContent>

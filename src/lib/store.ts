@@ -31,6 +31,7 @@ export interface ObjectDetail {
   creator: string | null;
   date_display: string | null;
   risk_score: number;
+  image_url: string | null;
 }
 
 export interface Sentence {
