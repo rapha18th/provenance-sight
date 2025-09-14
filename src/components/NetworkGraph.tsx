@@ -30,8 +30,8 @@ export function NetworkGraph({
     const edgesCopy = edges.map(d => ({ ...d }));
 
     // Set up the simulation
-    const simulation = d3.forceSimulation(nodesCopy as any)
-      .force("link", d3.forceLink(edgesCopy as any).id((d: any) => d.id).distance(100))
+    const simulation = d3.forceSimulation(nodesCopy as d3.SimulationNodeDatum[])
+      .force("link", d3.forceLink(edgesCopy).id((d: d3.SimulationNodeDatum) => (d as NetworkNode).id).distance(100))
       .force("charge", d3.forceManyBody().strength(-300))
       .force("center", d3.forceCenter(width / 2, height / 2))
       .force("collision", d3.forceCollide().radius(30));
@@ -40,13 +40,13 @@ export function NetworkGraph({
     const container = svg.append("g");
 
     // Add zoom behavior
-    const zoom = d3.zoom()
+    const zoom = d3.zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.5, 3])
-      .on("zoom", (event) => {
-        container.attr("transform", event.transform);
+      .on("zoom", (event: d3.D3ZoomEvent<SVGSVGElement, unknown>) => {
+        container.attr("transform", event.transform.toString());
       });
 
-    svg.call(zoom as any);
+    svg.call(zoom);
 
     // Create edges
     const link = container.append("g")
@@ -64,11 +64,11 @@ export function NetworkGraph({
 
     // Create nodes
     const node = container.append("g")
-      .selectAll("g")
+      .selectAll<SVGGElement, NetworkNode>("g")
       .data(nodesCopy)
       .join("g")
       .attr("cursor", "pointer")
-      .call(d3.drag<any, any>()
+      .call(d3.drag<SVGGElement, NetworkNode>()
         .on("start", dragstarted)
         .on("drag", dragged)
         .on("end", dragended));
@@ -117,28 +117,28 @@ export function NetworkGraph({
     // Update positions on tick
     simulation.on("tick", () => {
       link
-        .attr("x1", (d: any) => d.source.x)
-        .attr("y1", (d: any) => d.source.y)
-        .attr("x2", (d: any) => d.target.x)
-        .attr("y2", (d: any) => d.target.y);
+        .attr("x1", d => (d.source as d3.SimulationNodeDatum).x!)
+        .attr("y1", d => (d.source as d3.SimulationNodeDatum).y!)
+        .attr("x2", d => (d.target as d3.SimulationNodeDatum).x!)
+        .attr("y2", d => (d.target as d3.SimulationNodeDatum).y!);
 
       node
-        .attr("transform", (d: any) => `translate(${d.x},${d.y})`);
+        .attr("transform", d => `translate(${(d as d3.SimulationNodeDatum).x},${(d as d3.SimulationNodeDatum).y})`);
     });
 
     // Drag functions
-    function dragstarted(event: any) {
+    function dragstarted(event: d3.D3DragEvent<SVGGElement, NetworkNode, NetworkNode>) {
       if (!event.active) simulation.alphaTarget(0.3).restart();
       event.subject.fx = event.subject.x;
       event.subject.fy = event.subject.y;
     }
 
-    function dragged(event: any) {
+    function dragged(event: d3.D3DragEvent<SVGGElement, NetworkNode, NetworkNode>) {
       event.subject.fx = event.x;
       event.subject.fy = event.y;
     }
 
-    function dragended(event: any) {
+    function dragended(event: d3.D3DragEvent<SVGGElement, NetworkNode, NetworkNode>) {
       if (!event.active) simulation.alphaTarget(0);
       event.subject.fx = null;
       event.subject.fy = null;

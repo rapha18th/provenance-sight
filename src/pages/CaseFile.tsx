@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Sparkles, AlertTriangle, Calendar, Eye, Archive, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -9,8 +9,80 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { NetworkGraph } from '@/components/NetworkGraph';
 import { TimelineView } from '@/components/TimelineView';
 import { ExplainModal } from '@/components/ExplainModal';
-import { useInvestigationStore } from '@/lib/store';
+import { useInvestigationStore, GraphResponse, ObjectResponse, NetworkNode, NetworkEdge } from '@/lib/store';
 import { apiClient } from '@/lib/api';
+
+const augmentGraphData = (graph: GraphResponse | null, caseFile: ObjectResponse | null): GraphResponse | null => {
+  if (!graph || !caseFile || !caseFile.events) {
+    return graph;
+  }
+
+  // Check if augmentation is needed (only one object node, no edges)
+  if (graph.edges.length > 0 || graph.nodes.length > 1 || caseFile.events.length === 0) {
+    return graph;
+  }
+
+  const newNodes: NetworkNode[] = [...graph.nodes];
+  const newEdges: NetworkEdge[] = [...graph.edges];
+  const nodeIds = new Set(newNodes.map(n => n.id));
+
+  const objectNode = newNodes.find(n => n.type === 'object');
+  if (!objectNode) return graph;
+
+  caseFile.events.forEach((event, index) => {
+    const actorId = event.actor ? `actor:${event.actor}` : null;
+    const placeId = event.place ? `place:${event.place}` : null;
+
+    if (actorId && !nodeIds.has(actorId)) {
+      newNodes.push({ id: actorId, label: event.actor!, type: 'actor' });
+      nodeIds.add(actorId);
+    }
+
+    if (placeId && !nodeIds.has(placeId)) {
+      newNodes.push({ id: placeId, label: event.place!, type: 'place' });
+      nodeIds.add(placeId);
+    }
+
+    if (actorId) {
+      newEdges.push({
+        id: `edge:${objectNode.id}-${actorId}-${index}`,
+        source: objectNode.id,
+        target: actorId,
+        label: event.event_type,
+        date: event.date_from,
+        policy: [],
+        source_ref: event.source_ref
+      });
+    }
+
+    if (placeId) {
+       newEdges.push({
+        id: `edge:${objectNode.id}-${placeId}-event-${index}`,
+        source: objectNode.id,
+        target: placeId,
+        label: event.event_type,
+        date: event.date_from,
+        policy: [],
+        source_ref: event.source_ref
+      });
+    }
+
+    // Connect actor to place if both exist
+    if (actorId && placeId) {
+      newEdges.push({
+        id: `edge:${actorId}-${placeId}-${index}`,
+        source: actorId,
+        target: placeId,
+        label: 'occurred in',
+        date: event.date_from,
+        policy: [],
+        source_ref: event.source_ref
+      });
+    }
+  });
+
+  return { ok: true, nodes: newNodes, edges: newEdges };
+};
 import { cn } from '@/lib/utils';
 
 export default function CaseFile() {
@@ -32,28 +104,31 @@ export default function CaseFile() {
     setLoadingCase,
   } = useInvestigationStore();
 
-  useEffect(() => {
-    if (id) {
-      loadCaseFile(id);
-    }
-  }, [id]);
-
-  const loadCaseFile = async (caseId: string) => {
+  const loadCaseFile = useCallback(async (caseId: string) => {
     setLoadingCase(true);
     setError('');
 
     try {
       const id = parseInt(caseId);
       const caseData = await apiClient.getCaseFile(id);
-      setCurrentCase(caseData.object);
-      setGraphData(caseData.graph);  
+      setCurrentCase(caseData);
+
+      const augmentedGraph = augmentGraphData(caseData.graph, caseData);
+      setGraphData(augmentedGraph);
+
       setTimelineData(caseData.timeline);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load case file');
     } finally {
       setLoadingCase(false);
     }
-  };
+  }, [setLoadingCase, setError, setCurrentCase, setGraphData, setTimelineData]);
+
+  useEffect(() => {
+    if (id) {
+      loadCaseFile(id);
+    }
+  }, [id, loadCaseFile]);
 
   const handleExplainObject = () => {
     setExplainText('');
