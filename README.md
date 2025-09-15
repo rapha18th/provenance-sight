@@ -203,7 +203,7 @@ We welcome contributions to improve Provenance Radar's capabilities:
 
 MIT License
 
-Copyright (c) 2024 Provenance Radar
+Copyright (c) 2025 Provenance Radar
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
