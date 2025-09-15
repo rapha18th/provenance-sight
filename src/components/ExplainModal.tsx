@@ -1,8 +1,9 @@
-import { useState, useRef } from 'react';
-import { X, Sparkles, Loader2, Volume2, VolumeX, Play, Pause } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { X, Sparkles, Loader2, Volume2, VolumeX, Play, Pause, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Slider } from '@/components/ui/slider';
 import { apiClient } from '@/lib/api';
 
 interface ExplainModalProps {
@@ -18,9 +19,25 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
   const [explanation, setExplanation] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>('');
+  
+  // TTS states
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string>('');
+  const [isGeneratingTTS, setIsGeneratingTTS] = useState(false);
+  const [ttsError, setTtsError] = useState<string>('');
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [volume, setVolume] = useState([0.8]);
+  const [isMuted, setIsMuted] = useState(false);
+  
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  // Format time for display
+  const formatTime = (time: number) => {
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time % 60);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
 
   const fetchExplanation = async () => {
     if (isLoading) return;
@@ -28,6 +45,8 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
     setIsLoading(true);
     setError('');
     setExplanation('');
+    setAudioUrl('');
+    setTtsError('');
 
     try {
       let result;
@@ -43,7 +62,7 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
       if (explanationText) {
         setExplanation(explanationText);
         // Generate TTS for the explanation
-        await generateTTS(explanationText);
+        generateTTS(explanationText);
       } else {
         setExplanation('No explanation could be generated for this item.');
       }
@@ -55,26 +74,140 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
   };
 
   const generateTTS = async (text: string) => {
+    setIsGeneratingTTS(true);
+    setTtsError('');
+    
     try {
       const encodedText = encodeURIComponent(text);
       const ttsUrl = `https://text.pollinations.ai/${encodedText}?model=openai-audio&voice=nova`;
-      setAudioUrl(ttsUrl);
+      
+      // Test if the URL is accessible
+      const testAudio = new Audio();
+      
+      testAudio.addEventListener('canplaythrough', () => {
+        setAudioUrl(ttsUrl);
+        setIsGeneratingTTS(false);
+      });
+      
+      testAudio.addEventListener('error', () => {
+        setTtsError('Failed to generate audio. The TTS service may be unavailable.');
+        setIsGeneratingTTS(false);
+      });
+      
+      // Set a timeout for the TTS generation
+      const timeout = setTimeout(() => {
+        setTtsError('TTS generation timed out. Please try again.');
+        setIsGeneratingTTS(false);
+      }, 10000); // 10 second timeout
+      
+      testAudio.addEventListener('canplaythrough', () => {
+        clearTimeout(timeout);
+      });
+      
+      testAudio.src = ttsUrl;
     } catch (err) {
-      console.error('Failed to generate TTS:', err);
+      setTtsError('Failed to generate TTS audio');
+      setIsGeneratingTTS(false);
+      console.error('TTS generation error:', err);
+    }
+  };
+
+  const retryTTS = () => {
+    if (explanation) {
+      generateTTS(explanation);
     }
   };
 
   const togglePlayback = () => {
-    if (!audioRef.current) return;
+    if (!audioRef.current || !audioUrl) return;
 
     if (isPlaying) {
       audioRef.current.pause();
-      setIsPlaying(false);
     } else {
-      audioRef.current.play();
-      setIsPlaying(true);
+      audioRef.current.play().catch((err) => {
+        console.error('Playback failed:', err);
+        setTtsError('Failed to play audio. Please try again.');
+        setIsPlaying(false);
+      });
     }
   };
+
+  const handleSeek = (value: number[]) => {
+    if (!audioRef.current) return;
+    const newTime = (value[0] / 100) * duration;
+    audioRef.current.currentTime = newTime;
+    setCurrentTime(newTime);
+  };
+
+  const handleVolumeChange = (value: number[]) => {
+    setVolume(value);
+    if (audioRef.current) {
+      audioRef.current.volume = value[0];
+    }
+  };
+
+  const toggleMute = () => {
+    if (!audioRef.current) return;
+    
+    if (isMuted) {
+      audioRef.current.volume = volume[0];
+      setIsMuted(false);
+    } else {
+      audioRef.current.volume = 0;
+      setIsMuted(true);
+    }
+  };
+
+  // Audio event handlers
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handleLoadedMetadata = () => {
+      setDuration(audio.duration);
+    };
+
+    const handleTimeUpdate = () => {
+      setCurrentTime(audio.currentTime);
+    };
+
+    const handlePlay = () => {
+      setIsPlaying(true);
+    };
+
+    const handlePause = () => {
+      setIsPlaying(false);
+    };
+
+    const handleEnded = () => {
+      setIsPlaying(false);
+      setCurrentTime(0);
+    };
+
+    const handleError = () => {
+      setIsPlaying(false);
+      setTtsError('Audio playback failed. Please try regenerating the audio.');
+    };
+
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('play', handlePlay);
+    audio.addEventListener('pause', handlePause);
+    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('error', handleError);
+
+    // Set initial volume
+    audio.volume = volume[0];
+
+    return () => {
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('play', handlePlay);
+      audio.removeEventListener('pause', handlePause);
+      audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('error', handleError);
+    };
+  }, [audioUrl, volume]);
 
   const handleOpenChange = (open: boolean) => {
     if (!open) {
@@ -82,7 +215,10 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
       setExplanation('');
       setError('');
       setAudioUrl('');
+      setTtsError('');
       setIsPlaying(false);
+      setCurrentTime(0);
+      setDuration(0);
       if (audioRef.current) {
         audioRef.current.pause();
       }
@@ -129,26 +265,97 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
           {explanation && (
             <div className="space-y-4">
               {/* TTS Controls */}
-              <div className="flex items-center gap-2 p-3 bg-slate-800/30 rounded-lg border border-slate-700">
-                <Volume2 className="h-4 w-4 text-slate-400" />
-                <span className="text-sm text-slate-400">Audio playback:</span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={togglePlayback}
-                  disabled={!audioUrl}
-                  className="gap-2"
-                >
-                  {isPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
-                  {isPlaying ? 'Pause' : 'Play'}
-                </Button>
+              <div className="p-4 bg-slate-800/30 rounded-lg border border-slate-700 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Volume2 className="h-4 w-4 text-slate-400" />
+                    <span className="text-sm text-slate-400">Audio playback</span>
+                  </div>
+                  
+                  {isGeneratingTTS && (
+                    <div className="flex items-center gap-2 text-sm text-slate-400">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Generating audio...
+                    </div>
+                  )}
+                </div>
+
+                {ttsError && (
+                  <div className="p-2 bg-destructive/10 border border-destructive/20 rounded text-sm">
+                    <p className="text-destructive mb-2">{ttsError}</p>
+                    <Button variant="outline" size="sm" onClick={retryTTS}>
+                      Retry Audio Generation
+                    </Button>
+                  </div>
+                )}
+
+                {audioUrl && !ttsError && (
+                  <div className="space-y-3">
+                    {/* Playback controls */}
+                    <div className="flex items-center gap-3">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={togglePlayback}
+                        className="gap-2"
+                      >
+                        {isPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+                        {isPlaying ? 'Pause' : 'Play'}
+                      </Button>
+                      
+                      <span className="text-sm text-slate-400">
+                        {formatTime(currentTime)} / {formatTime(duration)}
+                      </span>
+                    </div>
+
+                    {/* Progress bar */}
+                    <div className="space-y-2">
+                      <Slider
+                        value={[duration > 0 ? (currentTime / duration) * 100 : 0]}
+                        onValueChange={handleSeek}
+                        max={100}
+                        step={0.1}
+                        className="w-full"
+                      />
+                    </div>
+
+                    {/* Volume controls */}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={toggleMute}
+                        className="p-1"
+                      >
+                        {isMuted || volume[0] === 0 ? 
+                          <VolumeX className="h-4 w-4" /> : 
+                          <Volume2 className="h-4 w-4" />
+                        }
+                      </Button>
+                      
+                      <Slider
+                        value={isMuted ? [0] : volume}
+                        onValueChange={handleVolumeChange}
+                        max={1}
+                        step={0.1}
+                        className="w-24"
+                      />
+                    </div>
+                  </div>
+                )}
+
                 {audioUrl && (
                   <audio
                     ref={audioRef}
                     src={audioUrl}
-                    onEnded={() => setIsPlaying(false)}
-                    onError={() => setIsPlaying(false)}
+                    preload="metadata"
                   />
+                )}
+
+                {!audioUrl && !isGeneratingTTS && !ttsError && (
+                  <Button variant="outline" size="sm" onClick={() => generateTTS(explanation)}>
+                    Generate Audio
+                  </Button>
                 )}
               </div>
 
