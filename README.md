@@ -1,5 +1,5 @@
 # Provenance Radar
-
+**Live demo:** https://provradar.netlify.app
 **An advanced investigation tool for identifying objects with potentially problematic ownership histories in museum collections**
 
 Provenance Radar combines AI-powered risk assessment, network analysis, and timeline visualization to help researchers, curators, and investigators identify cultural heritage objects that may have been looted, stolen, or otherwise acquired through problematic means.
@@ -230,5 +230,6 @@ SOFTWARE.
 - Flask for the server hosted on Huggingface
 - TiDB for the database and vector search
 ---
+**Live demo:** https://provradar.netlify.app
 
 **Note**: This tool is designed to assist researchers and cultural heritage professionals. All findings should be verified through proper academic and legal channels before taking any action regarding object ownership or restitution claims.
