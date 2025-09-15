@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
-import { NetworkNode, NetworkEdge } from '@/lib/store';
+import { NetworkNode, NetworkEdge, NetworkNodeWithSimulation } from '@/lib/store';
 
 interface NetworkGraphProps {
   nodes: NetworkNode[];
@@ -26,12 +26,12 @@ export function NetworkGraph({
     svg.selectAll("*").remove(); // Clear previous render
 
     // Create a copy of the data to avoid mutation
-    const nodesCopy = nodes.map(d => ({ ...d }));
+    const nodesCopy: NetworkNodeWithSimulation[] = nodes.map(d => ({ ...d }));
     const edgesCopy = edges.map(d => ({ ...d }));
 
     // Set up the simulation
-    const simulation = d3.forceSimulation(nodesCopy as d3.SimulationNodeDatum[])
-      .force("link", d3.forceLink(edgesCopy).id((d: d3.SimulationNodeDatum) => (d as NetworkNode).id).distance(100))
+    const simulation = d3.forceSimulation(nodesCopy)
+      .force("link", d3.forceLink(edgesCopy).id((d: any) => (d as NetworkNode).id).distance(100))
       .force("charge", d3.forceManyBody().strength(-300))
       .force("center", d3.forceCenter(width / 2, height / 2))
       .force("collision", d3.forceCollide().radius(30));
@@ -68,7 +68,7 @@ export function NetworkGraph({
       .data(nodesCopy)
       .join("g")
       .attr("cursor", "pointer")
-      .call(d3.drag<SVGGElement, NetworkNode>()
+      .call(d3.drag<SVGGElement, NetworkNodeWithSimulation>()
         .on("start", dragstarted)
         .on("drag", dragged)
         .on("end", dragended));
@@ -127,18 +127,18 @@ export function NetworkGraph({
     });
 
     // Drag functions
-    function dragstarted(event: d3.D3DragEvent<SVGGElement, NetworkNode, NetworkNode>) {
+    function dragstarted(event: d3.D3DragEvent<SVGGElement, NetworkNodeWithSimulation, NetworkNodeWithSimulation>) {
       if (!event.active) simulation.alphaTarget(0.3).restart();
       event.subject.fx = event.subject.x;
       event.subject.fy = event.subject.y;
     }
 
-    function dragged(event: d3.D3DragEvent<SVGGElement, NetworkNode, NetworkNode>) {
+    function dragged(event: d3.D3DragEvent<SVGGElement, NetworkNodeWithSimulation, NetworkNodeWithSimulation>) {
       event.subject.fx = event.x;
       event.subject.fy = event.y;
     }
 
-    function dragended(event: d3.D3DragEvent<SVGGElement, NetworkNode, NetworkNode>) {
+    function dragended(event: d3.D3DragEvent<SVGGElement, NetworkNodeWithSimulation, NetworkNodeWithSimulation>) {
       if (!event.active) simulation.alphaTarget(0);
       event.subject.fx = null;
       event.subject.fy = null;

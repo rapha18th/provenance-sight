@@ -98,6 +98,33 @@ class ProvenanceAPI {
     return this.request<TimelineResponse>(`/api/timeline/${id}`);
   }
 
+  // Places for map
+  async getPlaces(id: number): Promise<{
+    ok: boolean;
+    places: Array<{ 
+      place: string; 
+      date?: string | null; 
+      lat?: number | null; 
+      lon?: number | null 
+    }>;
+  }> {
+    return this.request(`/api/places/${id}`);
+  }
+
+  // Policy windows
+  async getPolicyWindows(): Promise<{
+    ok: boolean;
+    windows: Array<{ 
+      code: string; 
+      label: string; 
+      from: string; 
+      to?: string | null; 
+      ref?: string 
+    }>;
+  }> {
+    return this.request('/api/policy/windows');
+  }
+
   // Load complete case file
   async getCaseFile(id: number): Promise<{
     object: ObjectResponse;

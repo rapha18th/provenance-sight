@@ -138,6 +138,14 @@ export type NetworkNode = GraphNode;
 export type NetworkEdge = GraphEdge;
 export type TimelineEvent = TimelineItem;
 
+// D3 simulation augmented node interface
+export interface NetworkNodeWithSimulation extends NetworkNode {
+  x?: number;
+  y?: number;
+  fx?: number | null;
+  fy?: number | null;
+}
+
 // Store interface
 interface InvestigationStore {
   // Dashboard state

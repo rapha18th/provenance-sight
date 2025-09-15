@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { NetworkGraph } from '@/components/NetworkGraph';
 import { TimelineView } from '@/components/TimelineView';
+import { MapView } from '@/components/MapView';
 import { ExplainModal } from '@/components/ExplainModal';
 import { useInvestigationStore } from '@/lib/store';
 import { apiClient } from '@/lib/api';
@@ -20,6 +21,12 @@ export default function CaseFile() {
   const [showExplainModal, setShowExplainModal] = useState(false);
   const [explainText, setExplainText] = useState('');
   const [error, setError] = useState('');
+  const [placesData, setPlacesData] = useState<Array<{ 
+    place: string; 
+    date?: string | null; 
+    lat?: number | null; 
+    lon?: number | null 
+  }> | null>(null);
 
   const {
     currentCase,
@@ -38,10 +45,18 @@ export default function CaseFile() {
 
     try {
       const id = parseInt(caseId);
-      const caseData = await apiClient.getCaseFile(id);
+      const [caseData, placesResponse] = await Promise.all([
+        apiClient.getCaseFile(id),
+        apiClient.getPlaces(id).catch(() => ({ ok: false, places: [] }))
+      ]);
+      
       setCurrentCase(caseData.object);
       setGraphData(caseData.graph);
       setTimelineData(caseData.timeline);
+      
+      if (placesResponse.ok) {
+        setPlacesData(placesResponse.places);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load case file');
     } finally {
@@ -226,25 +241,32 @@ export default function CaseFile() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="network">
-              <Card className="bg-card border-slate-700">
-                <CardHeader>
-                  <CardTitle className="text-slate-100">Relationship Network</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  {graphData ? (
-                    <NetworkGraph
-                      nodes={graphData.nodes}
-                      edges={graphData.edges}
-                      height={600}
-                    />
-                  ) : (
-                    <div className="h-96 flex items-center justify-center text-slate-400">
-                      No network data available
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+            <TabsContent value="network" className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card className="bg-card border-slate-700">
+                  <CardHeader>
+                    <CardTitle className="text-slate-100">Relationship Network</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {graphData ? (
+                      <NetworkGraph
+                        nodes={graphData.nodes}
+                        edges={graphData.edges}
+                        height={400}
+                      />
+                    ) : (
+                      <div className="h-96 flex items-center justify-center text-slate-400">
+                        No network data available
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <MapView 
+                  places={placesData || []}
+                  loading={isLoadingCase}
+                />
+              </div>
             </TabsContent>
 
             <TabsContent value="timeline">
