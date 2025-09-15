@@ -87,7 +87,7 @@ TiDB-Ingest-Notebook/
 - Named Entity Recognition (NER) for automatic entity extraction
 - Temporal analysis for detecting suspicious ownership patterns
 - Geographic coding of locations mentioned in provenance records
-- Integration with external databases (Getty vocabularies, Wikidata, etc.)
+- Integration with external databases (AIC, Wikidata, etc.)
 
 ## 🛠️ Development Setup
 
