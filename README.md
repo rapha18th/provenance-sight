@@ -229,7 +229,9 @@ SOFTWARE.
 - Icons provided by [Lucide React](https://lucide.dev)
 - UI components based on [shadcn/ui](https://ui.shadcn.com)
 - TTS functionality powered by [Pollinations AI](https://pollinations.ai)
-
+- Gemini for the AI
+- Flask for the server hosted on Huggingface
+- TiDB for the database and vector search
 ---
 
 **Note**: This tool is designed to assist researchers and cultural heritage professionals. All findings should be verified through proper academic and legal channels before taking any action regarding object ownership or restitution claims.
