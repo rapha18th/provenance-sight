@@ -3,7 +3,6 @@ import { Lead } from '@/lib/store';
 import { useNavigate } from 'react-router-dom';
 import { SearchHeader } from '@/components/SearchHeader';
 import { LeadCard } from '@/components/LeadCard';
-import { FilterPanel } from '@/components/FilterPanel';
 import { useInvestigationStore } from '@/lib/store';
 import { apiClient } from '@/lib/api';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -11,7 +10,6 @@ import { AlertCircle } from 'lucide-react';
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const [showFilters, setShowFilters] = useState(false);
   const [error, setError] = useState<string>('');
   
   const {
@@ -74,14 +72,10 @@ export default function Dashboard() {
         onSearch={handleSearch}
         showStats={true}
         stats={healthStats || undefined}
-      />
-
-      <FilterPanel
         filters={filters}
         onFiltersChange={setFilters}
-        isOpen={showFilters}
-        onToggle={() => setShowFilters(!showFilters)}
       />
+
 
       <main className="container mx-auto px-6 py-8">
         {error && (

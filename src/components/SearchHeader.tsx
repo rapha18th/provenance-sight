@@ -4,6 +4,8 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import logo from '@/assets/provenance-radar-logo.png';
+import { LeadFilters } from '@/lib/store';
+import { Slider } from './ui/slider';
 
 interface SearchHeaderProps {
   onSearch?: (query: string) => void;
@@ -16,9 +18,18 @@ interface SearchHeaderProps {
       sentences: number;
     };
   };
+  filters: LeadFilters;
+  onFiltersChange: (filters: LeadFilters) => void;
 }
 
-export function SearchHeader({ onSearch, placeholder = "Search for suspicious objects...", showStats, stats }: SearchHeaderProps) {
+export function SearchHeader({
+  onSearch,
+  placeholder = "Search for suspicious objects...",
+  showStats,
+  stats,
+  filters,
+  onFiltersChange
+}: SearchHeaderProps) {
   const [query, setQuery] = useState('');
   const navigate = useNavigate();
 
@@ -35,6 +46,13 @@ export function SearchHeader({ onSearch, placeholder = "Search for suspicious ob
 
   const handleLogoClick = () => {
     navigate('/');
+  };
+
+  const handleMinScoreChange = (value: number[]) => {
+    onFiltersChange({
+      ...filters,
+      min_score: value[0],
+    });
   };
 
   return (
@@ -77,6 +95,30 @@ export function SearchHeader({ onSearch, placeholder = "Search for suspicious ob
             />
           </div>
         </form>
+
+        {/* Risk Score Threshold */}
+        <div className="space-y-3 mb-6">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium text-slate-200">
+              Minimum Risk Score
+            </label>
+            <span className="text-sm text-slate-400">
+              {Math.round((filters.min_score || 0) * 100)}%+
+            </span>
+          </div>
+          <Slider
+            value={[filters.min_score || 0]}
+            onValueChange={handleMinScoreChange}
+            max={1}
+            min={0}
+            step={0.1}
+            className="w-full"
+          />
+          <div className="flex justify-between text-xs text-slate-500">
+            <span>Low Risk (0%)</span>
+            <span>High Risk (100%)</span>
+          </div>
+        </div>
 
         {/* Stats */}
         {showStats && (
