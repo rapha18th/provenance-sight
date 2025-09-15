@@ -131,7 +131,7 @@ python main.py
 ### Data Ingestion Setup
 ```bash
 # Install Jupyter and required packages
-pip install jupyter pandas numpy sqlalchemy
+pip install jupyter pandas numpy pymysql
 
 # Launch notebook
 cd TiDB-Ingest-Notebook
