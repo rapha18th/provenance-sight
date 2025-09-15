@@ -1,8 +1,9 @@
 import { Lead } from '@/lib/store';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { AlertTriangle, Eye, Calendar, User } from 'lucide-react';
+import { AlertTriangle, Eye, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { normalizeRisk } from '@/lib/risk-utils';
 
 interface LeadCardProps {
   lead: Lead;
@@ -10,20 +11,18 @@ interface LeadCardProps {
 }
 
 export function LeadCard({ lead, onClick }: LeadCardProps) {
+  const normalizedScore = normalizeRisk(lead.risk_score);
+
   const getRiskColor = (score: number) => {
-    if (score >= 0.7) return 'risk-high';
-    if (score >= 0.3) return 'risk-medium';
+    if (score >= 75) return 'risk-high';
+    if (score >= 50) return 'risk-medium';
     return 'risk-low';
   };
 
   const getRiskLabel = (score: number) => {
-    if (score >= 0.7) return 'High Risk';
-    if (score >= 0.3) return 'Medium Risk';
+    if (score >= 75) return 'High Risk';
+    if (score >= 50) return 'Medium Risk';
     return 'Low Risk';
-  };
-
-  const formatRiskScore = (score: number) => {
-    return Math.round(score * 100);
   };
 
   // Parse comma-separated signals into array
@@ -58,11 +57,11 @@ export function LeadCard({ lead, onClick }: LeadCardProps) {
           <div className="flex flex-col items-end gap-2">
             <div className={cn(
               "h-3 w-3 rounded-full",
-              lead.risk_score >= 0.7 ? "bg-risk-high shadow-glow" : 
-              lead.risk_score >= 0.3 ? "bg-risk-medium" : "bg-risk-low"
+              normalizedScore >= 75 ? "bg-risk-high shadow-glow" :
+              normalizedScore >= 50 ? "bg-risk-medium" : "bg-risk-low"
             )} />
             <span className="text-xs text-slate-400">
-              {formatRiskScore(lead.risk_score)}%
+              {normalizedScore}
             </span>
           </div>
         </div>
@@ -90,11 +89,11 @@ export function LeadCard({ lead, onClick }: LeadCardProps) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Badge 
-              variant={lead.risk_score >= 0.7 ? "destructive" : lead.risk_score >= 0.3 ? "default" : "secondary"}
+              variant={normalizedScore >= 75 ? "destructive" : normalizedScore >= 50 ? "default" : "secondary"}
               className="gap-1"
             >
               <AlertTriangle className="h-3 w-3" />
-              {getRiskLabel(lead.risk_score)}
+              {getRiskLabel(normalizedScore)}
             </Badge>
           </div>
           
