@@ -1,7 +1,5 @@
 # Provenance Radar
 
-
-
 **An advanced investigation tool for identifying objects with potentially problematic ownership histories in museum collections**
 
 Provenance Radar combines AI-powered risk assessment, network analysis, and timeline visualization to help researchers, curators, and investigators identify cultural heritage objects that may have been looted, stolen, or otherwise acquired through problematic means.
@@ -92,6 +90,9 @@ TiDB-Ingest-Notebook/
 - Temporal analysis for detecting suspicious ownership patterns
 - Geographic coding of locations mentioned in provenance records
 - Integration with external databases (AIC, Wikidata, etc.)
+
+### Architecture Diagram
+![Architecture](https://i.imgur.com/1idb3td.jpeg)
 
 ## 🛠️ Development Setup
 
