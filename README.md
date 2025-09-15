@@ -169,10 +169,7 @@ docker run -p 5000:5000 provenance-radar-api
 
 Provenance Radar is designed to work with various museum collection management systems:
 
-- **Collection Management Systems**: TMS, EMu, CollectiveAccess
-- **Digital Asset Management**: CONTENTdm, Omeka, DSpace
-- **Standard Formats**: Dublin Core, CIDOC-CRM, LIDO
-- **APIs**: Getty vocabularies, Wikidata, museum open data initiatives
+- **APIs**: Art Institute Of Chicago
 
 ## 🤝 Contributing
 
@@ -228,7 +225,7 @@ SOFTWARE.
 - Built with [Lovable](https://lovable.dev) for rapid prototyping and deployment
 - Icons provided by [Lucide React](https://lucide.dev)
 - UI components based on [shadcn/ui](https://ui.shadcn.com)
-- TTS functionality powered by puter.ai
+- TTS functionality powered by puter.com
 - Gemini for the AI
 - Flask for the server hosted on Huggingface
 - TiDB for the database and vector search
