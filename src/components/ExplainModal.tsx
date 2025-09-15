@@ -7,6 +7,17 @@ import { Slider } from '@/components/ui/slider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { apiClient } from '@/lib/api';
 
+// Declare Puter global interface
+declare global {
+  interface Window {
+    puter: {
+      ai: {
+        txt2speech: (text: string, options?: any) => Promise<HTMLAudioElement>;
+      };
+    };
+  }
+}
+
 interface ExplainModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -23,35 +34,68 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
   
   // TTS states
   const [isPlaying, setIsPlaying] = useState(false);
-  const [audioUrl, setAudioUrl] = useState<string>('');
+  const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
   const [isGeneratingTTS, setIsGeneratingTTS] = useState(false);
   const [ttsError, setTtsError] = useState<string>('');
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [volume, setVolume] = useState([0.8]);
   const [isMuted, setIsMuted] = useState(false);
-  const [selectedVoice, setSelectedVoice] = useState('alloy');
+  const [selectedVoice, setSelectedVoice] = useState('Joanna');
+  const [selectedEngine, setSelectedEngine] = useState('neural');
+  const [selectedLanguage, setSelectedLanguage] = useState('en-US');
   const [webVoices, setWebVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [useWebSpeech, setUseWebSpeech] = useState(false);
+  const [puterLoaded, setPuterLoaded] = useState(false);
   
-  const audioRef = useRef<HTMLAudioElement>(null);
   const speechRef = useRef<SpeechSynthesisUtterance | null>(null);
 
-  // Available voices for Pollinations TTS
-  const POLLINATIONS_VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
+  // Puter.js TTS voices and engines
+  const PUTER_VOICES = [
+    'Joanna', 'Matthew', 'Amy', 'Brian', 'Emma', 'Aditi', 'Raveena', 'Ivy', 'Kendra', 'Kimberly', 'Salli', 'Joey', 'Justin', 'Kevin'
+  ];
 
-  // Load available Web Speech API voices
+  const PUTER_ENGINES = [
+    { id: 'standard', name: 'Standard', description: 'Good quality speech synthesis' },
+    { id: 'neural', name: 'Neural', description: 'Higher quality, more natural-sounding' },
+    { id: 'generative', name: 'Generative', description: 'Most human-like speech using AI' }
+  ];
+
+  const PUTER_LANGUAGES = [
+    { code: 'en-US', name: 'English (US)' },
+    { code: 'en-GB', name: 'English (UK)' },
+    { code: 'fr-FR', name: 'French' },
+    { code: 'de-DE', name: 'German' },
+    { code: 'es-ES', name: 'Spanish' },
+    { code: 'it-IT', name: 'Italian' },
+    { code: 'pt-BR', name: 'Portuguese (Brazil)' },
+    { code: 'ja-JP', name: 'Japanese' },
+    { code: 'ko-KR', name: 'Korean' },
+    { code: 'zh-CN', name: 'Chinese (Mandarin)' }
+  ];
+
+  // Load Puter.js script and Web Speech API voices
   useEffect(() => {
+    // Load Puter.js if not already loaded
+    if (!window.puter && !document.querySelector('script[src*="js.puter.com"]')) {
+      const script = document.createElement('script');
+      script.src = 'https://js.puter.com/v2/';
+      script.onload = () => setPuterLoaded(true);
+      script.onerror = () => {
+        console.error('Failed to load Puter.js');
+        setTtsError('Failed to load Puter.js library');
+      };
+      document.head.appendChild(script);
+    } else if (window.puter) {
+      setPuterLoaded(true);
+    }
+
+    // Load Web Speech API voices as fallback
     if ('speechSynthesis' in window) {
       const loadVoices = () => {
         const voices = speechSynthesis.getVoices();
         const englishVoices = voices.filter(voice => voice.lang.startsWith('en'));
         setWebVoices(englishVoices);
-        
-        // Set default web speech voice if none selected
-        if (englishVoices.length > 0 && !selectedVoice.includes('Google') && !selectedVoice.includes('Microsoft')) {
-          // Don't override if user has selected a web voice
-        }
       };
       
       loadVoices();
@@ -72,7 +116,7 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
     setIsLoading(true);
     setError('');
     setExplanation('');
-    setAudioUrl('');
+    setAudioElement(null);
     setTtsError('');
 
     try {
@@ -98,49 +142,26 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
     }
   };
 
-  const generatePollinationsTTS = async (text: string, voice: string): Promise<string> => {
-    // Truncate text if too long to avoid URL length issues
-    const truncatedText = text.length > 800 ? text.substring(0, 800) + '...' : text;
-    const encodedText = encodeURIComponent(truncatedText);
+  const generatePuterTTS = async (text: string): Promise<HTMLAudioElement> => {
+    if (!window.puter || !puterLoaded) {
+      throw new Error('Puter.js is not loaded. Please wait and try again.');
+    }
+
+    // Truncate text if too long to avoid issues
+    const truncatedText = text.length > 3000 ? text.substring(0, 3000) + '...' : text;
     
-    // Use the correct format from the API documentation
-    const ttsUrl = `https://text.pollinations.ai/${encodedText}?model=openai-audio&voice=${voice}`;
-    
-    return new Promise((resolve, reject) => {
-      const testAudio = new Audio();
-      const timeout = setTimeout(() => {
-        reject(new Error('TTS generation timed out. Service may be busy.'));
-      }, 20000); // 20 second timeout
+    try {
+      const audio = await window.puter.ai.txt2speech(truncatedText, {
+        voice: selectedVoice,
+        engine: selectedEngine,
+        language: selectedLanguage
+      });
 
-      const cleanup = () => {
-        clearTimeout(timeout);
-        testAudio.removeEventListener('canplaythrough', onSuccess);
-        testAudio.removeEventListener('error', onError);
-        testAudio.removeEventListener('loadeddata', onSuccess);
-      };
-
-      const onSuccess = () => {
-        cleanup();
-        resolve(ttsUrl);
-      };
-
-      const onError = () => {
-        cleanup();
-        reject(new Error('Pollinations TTS service is currently unavailable'));
-      };
-
-      testAudio.addEventListener('canplaythrough', onSuccess);
-      testAudio.addEventListener('loadeddata', onSuccess);
-      testAudio.addEventListener('error', onError);
-
-      try {
-        testAudio.src = ttsUrl;
-        testAudio.load();
-      } catch (err) {
-        cleanup();
-        reject(new Error('Failed to load TTS audio'));
-      }
-    });
+      return audio;
+    } catch (err) {
+      console.error('Puter TTS error:', err);
+      throw new Error('Puter TTS service failed. Please try again.');
+    }
   };
 
   const generateWebSpeechTTS = async (text: string, voiceName: string): Promise<void> => {
@@ -195,7 +216,7 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
   const generateTTS = async (text: string) => {
     setIsGeneratingTTS(true);
     setTtsError('');
-    setAudioUrl('');
+    setAudioElement(null);
     
     try {
       if (useWebSpeech || webVoices.some(v => v.name === selectedVoice)) {
@@ -203,20 +224,49 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
         await generateWebSpeechTTS(text, selectedVoice);
         setUseWebSpeech(true);
       } else {
-        // Use Pollinations TTS
-        const audioUrl = await generatePollinationsTTS(text, selectedVoice);
-        setAudioUrl(audioUrl);
+        // Use Puter.js TTS
+        const audio = await generatePuterTTS(text);
+        setAudioElement(audio);
         setUseWebSpeech(false);
+        
+        // Set up audio event listeners
+        audio.volume = isMuted ? 0 : volume[0];
+        
+        audio.addEventListener('loadedmetadata', () => {
+          setDuration(audio.duration || 0);
+        });
+        
+        audio.addEventListener('timeupdate', () => {
+          setCurrentTime(audio.currentTime || 0);
+        });
+        
+        audio.addEventListener('play', () => {
+          setIsPlaying(true);
+        });
+        
+        audio.addEventListener('pause', () => {
+          setIsPlaying(false);
+        });
+        
+        audio.addEventListener('ended', () => {
+          setIsPlaying(false);
+          setCurrentTime(0);
+        });
+        
+        audio.addEventListener('error', () => {
+          setIsPlaying(false);
+          setTtsError('Audio playback failed. Please try regenerating the audio.');
+        });
       }
       
     } catch (err) {
       console.error('TTS generation error:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to generate TTS audio';
       
-      // Try fallback to Web Speech API if Pollinations fails
+      // Try fallback to Web Speech API if Puter fails
       if (!useWebSpeech && !webVoices.some(v => v.name === selectedVoice) && 'speechSynthesis' in window && webVoices.length > 0) {
         try {
-          setTtsError('Pollinations TTS failed, trying browser speech...');
+          setTtsError('Puter TTS failed, trying browser speech...');
           await generateWebSpeechTTS(text, webVoices[0].name);
           setSelectedVoice(webVoices[0].name);
           setUseWebSpeech(true);
@@ -252,7 +302,7 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
       return;
     }
 
-    if (!audioRef.current || !audioUrl) {
+    if (!audioElement) {
       if (explanation) {
         generateTTS(explanation);
       }
@@ -260,9 +310,9 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
     }
 
     if (isPlaying) {
-      audioRef.current.pause();
+      audioElement.pause();
     } else {
-      audioRef.current.play().catch((err) => {
+      audioElement.play().catch((err) => {
         console.error('Playback failed:', err);
         setTtsError('Failed to play audio. Please try again.');
         setIsPlaying(false);
@@ -274,39 +324,38 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
     if (useWebSpeech) {
       speechSynthesis.cancel();
       setIsPlaying(false);
-    } else if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
+    } else if (audioElement) {
+      audioElement.pause();
+      audioElement.currentTime = 0;
       setCurrentTime(0);
       setIsPlaying(false);
     }
   };
 
   const handleSeek = (value: number[]) => {
-    if (useWebSpeech || !audioRef.current) return;
+    if (useWebSpeech || !audioElement) return;
     const newTime = (value[0] / 100) * duration;
-    audioRef.current.currentTime = newTime;
+    audioElement.currentTime = newTime;
     setCurrentTime(newTime);
   };
 
   const handleVolumeChange = (value: number[]) => {
     setVolume(value);
-    if (audioRef.current && !useWebSpeech) {
-      audioRef.current.volume = value[0];
+    if (audioElement && !useWebSpeech) {
+      audioElement.volume = value[0];
     }
-    // Note: Web Speech API volume is set when speech starts
   };
 
   const toggleMute = () => {
     if (isMuted) {
       setIsMuted(false);
-      if (audioRef.current && !useWebSpeech) {
-        audioRef.current.volume = volume[0];
+      if (audioElement && !useWebSpeech) {
+        audioElement.volume = volume[0];
       }
     } else {
       setIsMuted(true);
-      if (audioRef.current && !useWebSpeech) {
-        audioRef.current.volume = 0;
+      if (audioElement && !useWebSpeech) {
+        audioElement.volume = 0;
       }
     }
   };
@@ -315,16 +364,15 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
     setSelectedVoice(voice);
     
     // Reset audio state when changing voices
-    setAudioUrl('');
+    setAudioElement(null);
     setTtsError('');
     setIsPlaying(false);
     setCurrentTime(0);
     setDuration(0);
     
     // Stop any current playback
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
+    if (audioElement) {
+      audioElement.pause();
     }
     if ('speechSynthesis' in window) {
       speechSynthesis.cancel();
@@ -336,10 +384,10 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
   };
 
   const getAvailableVoices = () => {
-    const pollinationsVoices = POLLINATIONS_VOICES.map(voice => ({
+    const puterVoices = PUTER_VOICES.map(voice => ({
       id: voice,
-      name: `${voice} (Pollinations)`,
-      type: 'pollinations'
+      name: `${voice} (Puter)`,
+      type: 'puter'
     }));
     
     const webSpeechVoices = webVoices.map(voice => ({
@@ -348,58 +396,22 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
       type: 'webspeech'
     }));
     
-    return [...pollinationsVoices, ...webSpeechVoices];
+    return [...puterVoices, ...webSpeechVoices];
   };
-
-  // Audio event handlers for Pollinations TTS
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || useWebSpeech) return;
-
-    const handleLoadedMetadata = () => setDuration(audio.duration || 0);
-    const handleTimeUpdate = () => setCurrentTime(audio.currentTime || 0);
-    const handlePlay = () => setIsPlaying(true);
-    const handlePause = () => setIsPlaying(false);
-    const handleEnded = () => {
-      setIsPlaying(false);
-      setCurrentTime(0);
-    };
-    const handleError = () => {
-      setIsPlaying(false);
-      setTtsError('Audio playback failed. Please try regenerating the audio.');
-    };
-
-    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audio.addEventListener('timeupdate', handleTimeUpdate);
-    audio.addEventListener('play', handlePlay);
-    audio.addEventListener('pause', handlePause);
-    audio.addEventListener('ended', handleEnded);
-    audio.addEventListener('error', handleError);
-    audio.volume = isMuted ? 0 : volume[0];
-
-    return () => {
-      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.removeEventListener('timeupdate', handleTimeUpdate);
-      audio.removeEventListener('play', handlePlay);
-      audio.removeEventListener('pause', handlePause);
-      audio.removeEventListener('ended', handleEnded);
-      audio.removeEventListener('error', handleError);
-    };
-  }, [audioUrl, volume, isMuted, useWebSpeech]);
 
   const handleOpenChange = (open: boolean) => {
     if (!open) {
       onClose();
       setExplanation('');
       setError('');
-      setAudioUrl('');
+      setAudioElement(null);
       setTtsError('');
       setIsPlaying(false);
       setCurrentTime(0);
       setDuration(0);
       setUseWebSpeech(false);
-      if (audioRef.current) {
-        audioRef.current.pause();
+      if (audioElement) {
+        audioElement.pause();
       }
       if ('speechSynthesis' in window) {
         speechSynthesis.cancel();
@@ -409,7 +421,7 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
     }
   };
 
-  const hasAudioReady = audioUrl || useWebSpeech;
+  const hasAudioReady = audioElement || useWebSpeech;
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
@@ -453,7 +465,9 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Volume2 className="h-4 w-4 text-slate-400" />
-                    <span className="text-sm text-slate-400">Audio playback</span>
+                    <span className="text-sm text-slate-400">
+                      Audio playback {!puterLoaded && '(Loading Puter.js...)'}
+                    </span>
                   </div>
                   
                   {isGeneratingTTS && (
@@ -465,31 +479,68 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
                 </div>
 
                 {/* Voice Selection */}
-                <div>
-                  <label className="text-xs text-slate-400 mb-2 block">Voice</label>
-                  <Select value={selectedVoice} onValueChange={handleVoiceChange}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select a voice" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <div className="text-xs text-slate-400 px-2 py-1 font-medium">Pollinations TTS</div>
-                      {POLLINATIONS_VOICES.map(voice => (
-                        <SelectItem key={voice} value={voice}>
-                          {voice}
-                        </SelectItem>
-                      ))}
-                      {webVoices.length > 0 && (
-                        <>
-                          <div className="text-xs text-slate-400 px-2 py-1 font-medium border-t mt-1 pt-2">Browser Speech</div>
-                          {webVoices.slice(0, 8).map(voice => (
-                            <SelectItem key={voice.name} value={voice.name}>
-                              {voice.name}
-                            </SelectItem>
-                          ))}
-                        </>
-                      )}
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-xs text-slate-400 mb-2 block">Voice</label>
+                    <Select value={selectedVoice} onValueChange={handleVoiceChange}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select a voice" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <div className="text-xs text-slate-400 px-2 py-1 font-medium">Puter.js TTS</div>
+                        {PUTER_VOICES.map(voice => (
+                          <SelectItem key={voice} value={voice}>
+                            {voice}
+                          </SelectItem>
+                        ))}
+                        {webVoices.length > 0 && (
+                          <>
+                            <div className="text-xs text-slate-400 px-2 py-1 font-medium border-t mt-1 pt-2">Browser Speech</div>
+                            {webVoices.slice(0, 8).map(voice => (
+                              <SelectItem key={voice.name} value={voice.name}>
+                                {voice.name}
+                              </SelectItem>
+                            ))}
+                          </>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-slate-400 mb-2 block">Engine</label>
+                    <Select value={selectedEngine} onValueChange={setSelectedEngine}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PUTER_ENGINES.map(engine => (
+                          <SelectItem key={engine.id} value={engine.id}>
+                            <div>
+                              <div className="font-medium">{engine.name}</div>
+                              <div className="text-xs text-slate-400">{engine.description}</div>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-slate-400 mb-2 block">Language</label>
+                    <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PUTER_LANGUAGES.map(lang => (
+                          <SelectItem key={lang.code} value={lang.code}>
+                            {lang.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 {ttsError && (
@@ -541,7 +592,7 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
                       )}
                     </div>
 
-                    {/* Progress bar (only for Pollinations TTS) */}
+                    {/* Progress bar (only for Puter TTS) */}
                     {!useWebSpeech && duration > 0 && (
                       <div className="space-y-2">
                         <Slider
@@ -584,7 +635,7 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
                 )}
 
                 {/* Generate Audio Button */}
-                {!hasAudioReady && !isGeneratingTTS && !ttsError && (
+                {!hasAudioReady && !isGeneratingTTS && !ttsError && puterLoaded && (
                   <Button 
                     variant="outline" 
                     size="sm" 
@@ -594,15 +645,6 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
                     <Volume2 className="h-4 w-4" />
                     Generate Audio
                   </Button>
-                )}
-
-                {/* Audio element for Pollinations TTS */}
-                {audioUrl && !useWebSpeech && (
-                  <audio
-                    ref={audioRef}
-                    src={audioUrl}
-                    preload="metadata"
-                  />
                 )}
               </div>
 
