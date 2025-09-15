@@ -6,7 +6,6 @@ import { useNavigate } from 'react-router-dom';
 import logo from '@/assets/provenance-radar-logo.png';
 import { LeadFilters } from '@/lib/store';
 import { Slider } from './ui/slider';
-import { normalizeRisk, denormalizeRisk } from '@/lib/risk-utils';
 
 interface SearchHeaderProps {
   onSearch?: (query: string) => void;
@@ -50,15 +49,11 @@ export function SearchHeader({
   };
 
   const handleMinScoreChange = (value: number[]) => {
-    const normalizedScore = value[0];
-    const rawScore = denormalizeRisk(normalizedScore);
     onFiltersChange({
       ...filters,
-      min_score: rawScore,
+      min_score: value[0],
     });
   };
-
-  const normalizedValue = normalizeRisk(filters.min_score);
 
   return (
     <header className="border-b border-slate-700 bg-gradient-investigation">
@@ -108,20 +103,20 @@ export function SearchHeader({
               Minimum Risk Score
             </label>
             <span className="text-sm text-slate-400">
-              {normalizedValue}+
+              {Math.round((filters.min_score || 0) * 100)}%+
             </span>
           </div>
           <Slider
-            value={[normalizedValue]}
+            value={[filters.min_score || 0]}
             onValueChange={handleMinScoreChange}
-            max={100}
+            max={1}
             min={0}
-            step={1}
+            step={0.1}
             className="w-full"
           />
           <div className="flex justify-between text-xs text-slate-500">
-            <span>Low Risk (0)</span>
-            <span>High Risk (100)</span>
+            <span>Low Risk (0%)</span>
+            <span>High Risk (100%)</span>
           </div>
         </div>
 
