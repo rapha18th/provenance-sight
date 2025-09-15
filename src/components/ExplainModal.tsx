@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
-import { X, Sparkles, Loader2, Volume2, VolumeX, Play, Pause, Download } from 'lucide-react';
+import { X, Sparkles, Loader2, Volume2, VolumeX, Play, Pause, Download, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Slider } from '@/components/ui/slider';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { apiClient } from '@/lib/api';
 
 interface ExplainModalProps {
@@ -14,6 +15,25 @@ interface ExplainModalProps {
   text?: string;
   title?: string;
 }
+
+// Available TTS services
+const TTS_SERVICES = [
+  {
+    name: 'Pollinations.ai',
+    id: 'pollinations',
+    voices: ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']
+  },
+  {
+    name: 'Microsoft Edge',
+    id: 'edge',
+    voices: ['aria', 'davis', 'guy', 'jane']
+  },
+  {
+    name: 'Web Speech API',
+    id: 'webspeech',
+    voices: [] // Will be populated dynamically
+  }
+];
 
 export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: ExplainModalProps) {
   const [explanation, setExplanation] = useState<string>('');
@@ -29,8 +49,25 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
   const [currentTime, setCurrentTime] = useState(0);
   const [volume, setVolume] = useState([0.8]);
   const [isMuted, setIsMuted] = useState(false);
+  const [selectedService, setSelectedService] = useState('pollinations');
+  const [selectedVoice, setSelectedVoice] = useState('nova');
+  const [webVoices, setWebVoices] = useState<SpeechSynthesisVoice[]>([]);
   
   const audioRef = useRef<HTMLAudioElement>(null);
+  const speechRef = useRef<SpeechSynthesisUtterance | null>(null);
+
+  // Load available Web Speech API voices
+  useEffect(() => {
+    if ('speechSynthesis' in window) {
+      const loadVoices = () => {
+        const voices = speechSynthesis.getVoices();
+        setWebVoices(voices.filter(voice => voice.lang.startsWith('en')));
+      };
+      
+      loadVoices();
+      speechSynthesis.onvoiceschanged = loadVoices;
+    }
+  }, []);
 
   // Format time for display
   const formatTime = (time: number) => {
@@ -61,8 +98,6 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
       const explanationText = result.note || result.explanation;
       if (explanationText) {
         setExplanation(explanationText);
-        // Generate TTS for the explanation
-        generateTTS(explanationText);
       } else {
         setExplanation('No explanation could be generated for this item.');
       }
@@ -73,42 +108,125 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
     }
   };
 
+  const generatePollinationsTTS = async (text: string, voice: string): Promise<string> => {
+    // Truncate text if too long to avoid URL length issues
+    const truncatedText = text.length > 500 ? text.substring(0, 500) + '...' : text;
+    const encodedText = encodeURIComponent(truncatedText);
+    const ttsUrl = `https://text.pollinations.ai/${encodedText}?model=openai-audio&voice=${voice}`;
+    
+    return new Promise((resolve, reject) => {
+      const testAudio = new Audio();
+      const timeout = setTimeout(() => {
+        reject(new Error('TTS generation timed out'));
+      }, 15000); // 15 second timeout
+
+      testAudio.addEventListener('canplaythrough', () => {
+        clearTimeout(timeout);
+        resolve(ttsUrl);
+      });
+
+      testAudio.addEventListener('error', () => {
+        clearTimeout(timeout);
+        reject(new Error('Failed to load audio from Pollinations.ai'));
+      });
+
+      testAudio.src = ttsUrl;
+    });
+  };
+
+  const generateEdgeTTS = async (text: string, voice: string): Promise<string> => {
+    // Fallback to a public Edge TTS service (this is a placeholder - you'd need to implement or use a real service)
+    const response = await fetch('https://api.your-edge-tts-service.com/synthesize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, voice })
+    });
+    
+    if (!response.ok) {
+      throw new Error('Edge TTS service unavailable');
+    }
+    
+    const audioBlob = await response.blob();
+    return URL.createObjectURL(audioBlob);
+  };
+
+  const generateWebSpeechTTS = async (text: string, voiceName: string): Promise<void> => {
+    if (!('speechSynthesis' in window)) {
+      throw new Error('Web Speech API not supported');
+    }
+
+    return new Promise((resolve, reject) => {
+      const utterance = new SpeechSynthesisUtterance(text);
+      const voice = webVoices.find(v => v.name === voiceName) || webVoices[0];
+      
+      if (voice) {
+        utterance.voice = voice;
+      }
+      
+      utterance.rate = 1;
+      utterance.pitch = 1;
+      utterance.volume = volume[0];
+      
+      utterance.onend = () => {
+        setIsPlaying(false);
+        resolve();
+      };
+      
+      utterance.onerror = (event) => {
+        setIsPlaying(false);
+        reject(new Error(`Speech synthesis failed: ${event.error}`));
+      };
+      
+      speechRef.current = utterance;
+      speechSynthesis.speak(utterance);
+      setIsPlaying(true);
+      resolve();
+    });
+  };
+
   const generateTTS = async (text: string) => {
     setIsGeneratingTTS(true);
     setTtsError('');
+    setAudioUrl('');
     
     try {
-      const encodedText = encodeURIComponent(text);
-      const ttsUrl = `https://text.pollinations.ai/${encodedText}?model=openai-audio&voice=nova`;
+      let audioUrl = '';
       
-      // Test if the URL is accessible
-      const testAudio = new Audio();
+      switch (selectedService) {
+        case 'pollinations':
+          audioUrl = await generatePollinationsTTS(text, selectedVoice);
+          setAudioUrl(audioUrl);
+          break;
+          
+        case 'edge':
+          audioUrl = await generateEdgeTTS(text, selectedVoice);
+          setAudioUrl(audioUrl);
+          break;
+          
+        case 'webspeech':
+          await generateWebSpeechTTS(text, selectedVoice);
+          break;
+          
+        default:
+          throw new Error('Unknown TTS service');
+      }
       
-      testAudio.addEventListener('canplaythrough', () => {
-        setAudioUrl(ttsUrl);
-        setIsGeneratingTTS(false);
-      });
-      
-      testAudio.addEventListener('error', () => {
-        setTtsError('Failed to generate audio. The TTS service may be unavailable.');
-        setIsGeneratingTTS(false);
-      });
-      
-      // Set a timeout for the TTS generation
-      const timeout = setTimeout(() => {
-        setTtsError('TTS generation timed out. Please try again.');
-        setIsGeneratingTTS(false);
-      }, 10000); // 10 second timeout
-      
-      testAudio.addEventListener('canplaythrough', () => {
-        clearTimeout(timeout);
-      });
-      
-      testAudio.src = ttsUrl;
     } catch (err) {
-      setTtsError('Failed to generate TTS audio');
-      setIsGeneratingTTS(false);
       console.error('TTS generation error:', err);
+      setTtsError(err instanceof Error ? err.message : 'Failed to generate TTS audio');
+      
+      // Try fallback to Web Speech API
+      if (selectedService !== 'webspeech' && 'speechSynthesis' in window) {
+        try {
+          setTtsError('Primary TTS failed, trying Web Speech API...');
+          await generateWebSpeechTTS(text, webVoices[0]?.name || '');
+          setTtsError('');
+        } catch (fallbackErr) {
+          setTtsError('All TTS services failed. Please try again later.');
+        }
+      }
+    } finally {
+      setIsGeneratingTTS(false);
     }
   };
 
@@ -119,6 +237,19 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
   };
 
   const togglePlayback = () => {
+    if (selectedService === 'webspeech') {
+      if (isPlaying) {
+        speechSynthesis.pause();
+        setIsPlaying(false);
+      } else if (speechSynthesis.paused) {
+        speechSynthesis.resume();
+        setIsPlaying(true);
+      } else {
+        generateTTS(explanation);
+      }
+      return;
+    }
+
     if (!audioRef.current || !audioUrl) return;
 
     if (isPlaying) {
@@ -133,7 +264,7 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
   };
 
   const handleSeek = (value: number[]) => {
-    if (!audioRef.current) return;
+    if (!audioRef.current || selectedService === 'webspeech') return;
     const newTime = (value[0] / 100) * duration;
     audioRef.current.currentTime = newTime;
     setCurrentTime(newTime);
@@ -144,46 +275,67 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
     if (audioRef.current) {
       audioRef.current.volume = value[0];
     }
+    if (speechRef.current) {
+      speechRef.current.volume = value[0];
+    }
   };
 
   const toggleMute = () => {
-    if (!audioRef.current) return;
+    if (!audioRef.current && selectedService !== 'webspeech') return;
     
     if (isMuted) {
-      audioRef.current.volume = volume[0];
+      if (audioRef.current) audioRef.current.volume = volume[0];
       setIsMuted(false);
     } else {
-      audioRef.current.volume = 0;
+      if (audioRef.current) audioRef.current.volume = 0;
       setIsMuted(true);
     }
+  };
+
+  const handleServiceChange = (service: string) => {
+    setSelectedService(service);
+    setAudioUrl('');
+    setTtsError('');
+    setIsPlaying(false);
+    
+    // Reset voice selection
+    const serviceInfo = TTS_SERVICES.find(s => s.id === service);
+    if (serviceInfo && serviceInfo.voices.length > 0) {
+      setSelectedVoice(serviceInfo.voices[0]);
+    } else if (service === 'webspeech' && webVoices.length > 0) {
+      setSelectedVoice(webVoices[0].name);
+    }
+    
+    // Stop any current playback
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+    if ('speechSynthesis' in window) {
+      speechSynthesis.cancel();
+    }
+  };
+
+  const getAvailableVoices = () => {
+    const service = TTS_SERVICES.find(s => s.id === selectedService);
+    if (service?.id === 'webspeech') {
+      return webVoices.map(voice => ({ id: voice.name, name: voice.name }));
+    }
+    return service?.voices.map(voice => ({ id: voice, name: voice })) || [];
   };
 
   // Audio event handlers
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || selectedService === 'webspeech') return;
 
-    const handleLoadedMetadata = () => {
-      setDuration(audio.duration);
-    };
-
-    const handleTimeUpdate = () => {
-      setCurrentTime(audio.currentTime);
-    };
-
-    const handlePlay = () => {
-      setIsPlaying(true);
-    };
-
-    const handlePause = () => {
-      setIsPlaying(false);
-    };
-
+    const handleLoadedMetadata = () => setDuration(audio.duration);
+    const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
+    const handlePlay = () => setIsPlaying(true);
+    const handlePause = () => setIsPlaying(false);
     const handleEnded = () => {
       setIsPlaying(false);
       setCurrentTime(0);
     };
-
     const handleError = () => {
       setIsPlaying(false);
       setTtsError('Audio playback failed. Please try regenerating the audio.');
@@ -195,8 +347,6 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
     audio.addEventListener('pause', handlePause);
     audio.addEventListener('ended', handleEnded);
     audio.addEventListener('error', handleError);
-
-    // Set initial volume
     audio.volume = volume[0];
 
     return () => {
@@ -207,7 +357,7 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('error', handleError);
     };
-  }, [audioUrl, volume]);
+  }, [audioUrl, volume, selectedService]);
 
   const handleOpenChange = (open: boolean) => {
     if (!open) {
@@ -221,6 +371,9 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
       setDuration(0);
       if (audioRef.current) {
         audioRef.current.pause();
+      }
+      if ('speechSynthesis' in window) {
+        speechSynthesis.cancel();
       }
     } else if (open && !explanation && !isLoading) {
       fetchExplanation();
@@ -265,7 +418,7 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
           {explanation && (
             <div className="space-y-4">
               {/* TTS Controls */}
-              <div className="p-4 bg-slate-800/30 rounded-lg border border-slate-700 space-y-3">
+              <div className="p-4 bg-slate-800/30 rounded-lg border border-slate-700 space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Volume2 className="h-4 w-4 text-slate-400" />
@@ -280,16 +433,52 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
                   )}
                 </div>
 
+                {/* TTS Service Selection */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-slate-400 mb-1 block">TTS Service</label>
+                    <Select value={selectedService} onValueChange={handleServiceChange}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TTS_SERVICES.map(service => (
+                          <SelectItem key={service.id} value={service.id}>
+                            {service.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div>
+                    <label className="text-xs text-slate-400 mb-1 block">Voice</label>
+                    <Select value={selectedVoice} onValueChange={setSelectedVoice}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {getAvailableVoices().map(voice => (
+                          <SelectItem key={voice.id} value={voice.id}>
+                            {voice.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
                 {ttsError && (
-                  <div className="p-2 bg-destructive/10 border border-destructive/20 rounded text-sm">
+                  <div className="p-3 bg-destructive/10 border border-destructive/20 rounded text-sm">
                     <p className="text-destructive mb-2">{ttsError}</p>
-                    <Button variant="outline" size="sm" onClick={retryTTS}>
-                      Retry Audio Generation
+                    <Button variant="outline" size="sm" onClick={retryTTS} className="gap-2">
+                      <RefreshCw className="h-3 w-3" />
+                      Retry
                     </Button>
                   </div>
                 )}
 
-                {audioUrl && !ttsError && (
+                {((audioUrl && !ttsError) || selectedService === 'webspeech') && (
                   <div className="space-y-3">
                     {/* Playback controls */}
                     <div className="flex items-center gap-3">
@@ -298,26 +487,31 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
                         size="sm"
                         onClick={togglePlayback}
                         className="gap-2"
+                        disabled={selectedService === 'webspeech' && !webVoices.length}
                       >
                         {isPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
                         {isPlaying ? 'Pause' : 'Play'}
                       </Button>
                       
-                      <span className="text-sm text-slate-400">
-                        {formatTime(currentTime)} / {formatTime(duration)}
-                      </span>
+                      {selectedService !== 'webspeech' && (
+                        <span className="text-sm text-slate-400">
+                          {formatTime(currentTime)} / {formatTime(duration)}
+                        </span>
+                      )}
                     </div>
 
-                    {/* Progress bar */}
-                    <div className="space-y-2">
-                      <Slider
-                        value={[duration > 0 ? (currentTime / duration) * 100 : 0]}
-                        onValueChange={handleSeek}
-                        max={100}
-                        step={0.1}
-                        className="w-full"
-                      />
-                    </div>
+                    {/* Progress bar (not available for Web Speech API) */}
+                    {selectedService !== 'webspeech' && (
+                      <div className="space-y-2">
+                        <Slider
+                          value={[duration > 0 ? (currentTime / duration) * 100 : 0]}
+                          onValueChange={handleSeek}
+                          max={100}
+                          step={0.1}
+                          className="w-full"
+                        />
+                      </div>
+                    )}
 
                     {/* Volume controls */}
                     <div className="flex items-center gap-2">
@@ -344,7 +538,7 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
                   </div>
                 )}
 
-                {audioUrl && (
+                {audioUrl && selectedService !== 'webspeech' && (
                   <audio
                     ref={audioRef}
                     src={audioUrl}
@@ -352,9 +546,19 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
                   />
                 )}
 
-                {!audioUrl && !isGeneratingTTS && !ttsError && (
+                {!audioUrl && !isGeneratingTTS && !ttsError && selectedService !== 'webspeech' && (
                   <Button variant="outline" size="sm" onClick={() => generateTTS(explanation)}>
                     Generate Audio
+                  </Button>
+                )}
+
+                {selectedService === 'webspeech' && !webVoices.length && (
+                  <p className="text-sm text-slate-400">Loading voices...</p>
+                )}
+
+                {selectedService === 'webspeech' && webVoices.length > 0 && (
+                  <Button variant="outline" size="sm" onClick={() => generateTTS(explanation)}>
+                    Speak Text
                   </Button>
                 )}
               </div>
