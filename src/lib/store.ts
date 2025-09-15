@@ -127,7 +127,6 @@ export interface ExplainResponse {
 
 // Filters interface
 export interface LeadFilters {
-  source?: string;
   min_score?: number;
   search?: string;
   limit?: number;
