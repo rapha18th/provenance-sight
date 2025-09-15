@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { X, Sparkles, Loader2 } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { X, Sparkles, Loader2, Volume2, VolumeX, Play, Pause } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -18,6 +18,9 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
   const [explanation, setExplanation] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>('');
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [audioUrl, setAudioUrl] = useState<string>('');
+  const audioRef = useRef<HTMLAudioElement>(null);
 
   const fetchExplanation = async () => {
     if (isLoading) return;
@@ -39,6 +42,8 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
       const explanationText = result.note || result.explanation;
       if (explanationText) {
         setExplanation(explanationText);
+        // Generate TTS for the explanation
+        await generateTTS(explanationText);
       } else {
         setExplanation('No explanation could be generated for this item.');
       }
@@ -49,11 +54,38 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
     }
   };
 
+  const generateTTS = async (text: string) => {
+    try {
+      const encodedText = encodeURIComponent(text);
+      const ttsUrl = `https://text.pollinations.ai/${encodedText}?model=openai-audio&voice=nova`;
+      setAudioUrl(ttsUrl);
+    } catch (err) {
+      console.error('Failed to generate TTS:', err);
+    }
+  };
+
+  const togglePlayback = () => {
+    if (!audioRef.current) return;
+
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      audioRef.current.play();
+      setIsPlaying(true);
+    }
+  };
+
   const handleOpenChange = (open: boolean) => {
     if (!open) {
       onClose();
       setExplanation('');
       setError('');
+      setAudioUrl('');
+      setIsPlaying(false);
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
     } else if (open && !explanation && !isLoading) {
       fetchExplanation();
     }
@@ -96,6 +128,30 @@ export function ExplainModal({ isOpen, onClose, type, objectId, text, title }: E
 
           {explanation && (
             <div className="space-y-4">
+              {/* TTS Controls */}
+              <div className="flex items-center gap-2 p-3 bg-slate-800/30 rounded-lg border border-slate-700">
+                <Volume2 className="h-4 w-4 text-slate-400" />
+                <span className="text-sm text-slate-400">Audio playback:</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={togglePlayback}
+                  disabled={!audioUrl}
+                  className="gap-2"
+                >
+                  {isPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+                  {isPlaying ? 'Pause' : 'Play'}
+                </Button>
+                {audioUrl && (
+                  <audio
+                    ref={audioRef}
+                    src={audioUrl}
+                    onEnded={() => setIsPlaying(false)}
+                    onError={() => setIsPlaying(false)}
+                  />
+                )}
+              </div>
+
               {/* Show the text being explained if it's a text explanation */}
               {type === 'text' && text && (
                 <div className="p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
