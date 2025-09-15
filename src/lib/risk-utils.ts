@@ -1,16 +1,19 @@
 /**
  * Normalizes a raw risk score (e.g., 100-2000) to a user-friendly 0-100 scale
  * using a logarithmic curve.
- * @param score The raw risk score.
+ * @param score The raw risk score, which may be a number or a string.
  * @returns A normalized score between 0 and 100.
  */
-export function normalizeRisk(score: number | null | undefined): number {
-  if (typeof score !== 'number' || isNaN(score)) return 0;
+export function normalizeRisk(score: any): number {
+  // Coerce score to a number. Handles strings, nulls, undefined.
+  const numericScore = parseFloat(score);
 
-  const safeScore = Math.max(score, 1); // Prevent issues with 0 or negative numbers
-  const offset = 100;                    // Shifts the curve to start ramping up around a raw score of 100
-  const scale = 10;                      // Controls the steepness of the curve
-  const maxScore = 100;                  // Cap the output score
+  if (isNaN(numericScore)) return 0;
+
+  const safeScore = Math.max(numericScore, 1); // Prevent issues with 0 or negative numbers
+  const offset = 100;                          // Shifts the curve to start ramping up around a raw score of 100
+  const scale = 10;                            // Controls the steepness of the curve
+  const maxScore = 100;                        // Cap the output score
 
   const normalized = Math.log(safeScore + offset) * scale;
 
