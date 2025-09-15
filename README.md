@@ -228,7 +228,7 @@ SOFTWARE.
 - Built with [Lovable](https://lovable.dev) for rapid prototyping and deployment
 - Icons provided by [Lucide React](https://lucide.dev)
 - UI components based on [shadcn/ui](https://ui.shadcn.com)
-- TTS functionality powered by [Pollinations AI](https://pollinations.ai)
+- TTS functionality powered by puter.ai
 - Gemini for the AI
 - Flask for the server hosted on Huggingface
 - TiDB for the database and vector search
