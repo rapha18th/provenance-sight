@@ -249,9 +249,68 @@ def gemini_explain(prompt: str, sys: str = None, model: str = EXPLAIN_MODEL) -> 
     return getattr(resp, "text", "").strip() or ""
 
 # ───────────────────────────────────────────────────────────────────────────────
-# UTIL: Build graph & timeline from events (+ risk overlays)
+# UTIL: Build risk scores, graph & timeline from events (+ risk overlays)
 # ───────────────────────────────────────────────────────────────────────────────
+# 
+# Targets:
+#   raw 100  -> ~55
+#   raw 200  -> ~80
+#   raw 2000 -> ~99 (slow approach to 99 beyond this)
+# BLOCK 1 — Helpers (drop-in)
+# - Piecewise normalize_risk() curve
+# - _to_float() coercion
+# - _apply_normalized_risk_inplace(): overwrites 'risk_score' and keeps 'risk_score_raw'
 
+import math
+from decimal import Decimal
+
+def _to_float(x):
+    if x is None: return None
+    if isinstance(x, (int, float)): return float(x)
+    if isinstance(x, Decimal): return float(x)
+    if isinstance(x, str):
+        try: return float(x.strip().replace("%",""))
+        except Exception: return None
+    try: return float(x)
+    except Exception: return None
+
+def _piecewise_0_99_from_percent(pct: float) -> float:
+    """Piecewise curve on a 0–99 scale using 'percent' inputs (100, 200, ...)."""
+    x = max(float(pct), 0.0)
+    if x <= 100.0:
+        out = 55.0 * ((x / 100.0) ** 0.7)              # ~55 at 100
+    elif x <= 200.0:
+        out = 55.0 + 25.0 * (((x - 100.0) / 100.0) ** 0.8)  # 55→80 between 100–200
+    else:
+        k = math.log(100.0) / 1800.0                   # ~98.8 at 2000
+        out = 99.0 - 19.0 * math.exp(-k * (x - 200.0))
+    return max(0.0, min(out, 99.0))
+
+def normalize_risk(score_ratio: float) -> float:
+    """
+    INPUT:  raw ratio (1.0=100%, 2.0=200%, 6.0=600%)
+    OUTPUT: normalized ratio on 0–1 scale (e.g., 0.8 for 80%)
+    """
+    r = _to_float(score_ratio)
+    if r is None: return None
+    pct_in = r * 100.0                    # convert to percent domain for mapping
+    pct_out = _piecewise_0_99_from_percent(pct_in)
+    return round(pct_out / 100.0, 6)      # send back as 0–1 for the UI
+
+
+def _apply_normalized_risk_inplace(row: dict):
+    if not isinstance(row, dict):
+        return
+    raw_ratio = _to_float(row.get("risk_score"))
+    if raw_ratio is None:
+        return
+    norm_ratio = normalize_risk(raw_ratio)             # 0–1
+    norm_0_99  = None if norm_ratio is None else round(norm_ratio * 100.0, 2)
+
+    row["risk_score_raw"]       = raw_ratio           # raw ratio (e.g., 2.0)
+    row["risk_score_norm_0_99"] = norm_0_99           # 0–99 reference (e.g., 80.0)
+    row["risk_score"]           = norm_ratio          # **what client already uses** (0–1)
+    row["risk_score_normalized"]= norm_ratio          # alias if client checks this too
 
 
 EVENT_VERBS = {
@@ -518,12 +577,14 @@ def health():
 def policy_windows():
     return jsonify({"ok": True, "windows": POLICY_WINDOWS})
 
+
 @app.get("/api/leads")
 @with_db_retry
-def get_leads():  # Changed function name to avoid conflicts
+def get_leads():
     limit = max(1, min(int(request.args.get("limit", 50)), 200))
     min_score = float(request.args.get("min_score", 0))
     source = request.args.get("source")
+
     sql = (
         "SELECT object_id, source, title, creator, risk_score, top_signals "
         "FROM flagged_leads WHERE risk_score >= %s "
@@ -534,30 +595,86 @@ def get_leads():  # Changed function name to avoid conflicts
         args.append(source)
     sql += " LIMIT %s"
     args.append(limit)
+
     with cursor() as cur:
         cur.execute(sql, args)
         rows = cur.fetchall()
-    return jsonify({"ok": True, "data": rows})
+
+    for r in rows:
+        _apply_normalized_risk_inplace(r)
+
+    log.info("[RISK] /api/leads called | fetched=%s limit=%s min_score=%s source=%s",
+             len(rows), limit, min_score, source or "ALL")
+
+    for i, r in enumerate(rows[:5], start=1):
+        raw_ratio = _to_float(r.get("risk_score_raw"))
+        raw_pct   = None if raw_ratio is None else round(raw_ratio * 100.0, 2)
+        norm_ratio= _to_float(r.get("risk_score"))               # 0–1
+        norm_pct  = None if norm_ratio is None else round(norm_ratio * 100.0)  # shown by UI
+
+        log.info(
+            "[RISK] lead %d/%d | object_id=%s | title=%s | raw_ratio=%.3f | raw_pct=%s | norm_ratio=%.3f | norm_pct≈%s%%",
+            i, min(5, len(rows)),
+            r.get("object_id"),
+            (r.get("title") or "")[:80],
+            raw_ratio if raw_ratio is not None else -1.0,
+            f"{raw_pct:.0f}" if raw_pct is not None else "NA",
+            norm_ratio if norm_ratio is not None else -1.0,
+            f"{norm_pct:.0f}" if norm_pct is not None else "NA",
+        )
+
+    resp = jsonify({"ok": True, "data": rows})
+    resp.headers["Cache-Control"] = "no-store, max-age=0"
+    return resp
+
 
 @app.get("/api/object/<int:object_id>")
 @with_db_retry
 def object_detail(object_id: int):
     with cursor() as cur:
-        # Add image_url to the SELECT statement
         cur.execute("SELECT *, image_url FROM objects WHERE object_id=%s", (object_id,))
         obj = cur.fetchone()
         if not obj:
             return jsonify({"ok": False, "error": "not_found"}), 404
-        # ... (the rest of the function remains the same)
+
+        # --- Normalize + overwrite the field the client reads (0..1) -----------
+        raw_ratio = _to_float(obj.get("risk_score"))            # e.g., 2.0 = 200%
+        norm_ratio = normalize_risk(raw_ratio) if raw_ratio is not None else None  # 0..1
+        norm_0_99  = None if norm_ratio is None else round(norm_ratio * 100.0, 2) # reference
+
+        obj["risk_score_raw"]       = raw_ratio
+        obj["risk_score_norm_0_99"] = norm_0_99
+        obj["risk_score"]           = norm_ratio                 # what the UI already reads
+        obj["risk_score_normalized"]= norm_ratio                 # alias
+
+        # --- Log one line per object fetch (visible on HF console) -------------
+        log.info(
+            "[RISK] /api/object | object_id=%s | raw_ratio=%s | raw_pct=%s | norm_ratio=%s | norm_pct≈%s%%",
+            object_id,
+            f"{raw_ratio:.3f}" if raw_ratio is not None else "NA",
+            f"{raw_ratio*100:.0f}" if raw_ratio is not None else "NA",
+            f"{norm_ratio:.3f}" if norm_ratio is not None else "NA",
+            f"{norm_ratio*100:.0f}" if norm_ratio is not None else "NA",
+        )
+
+        # -----------------------------------------------------------------------
         cur.execute("SELECT seq, sentence FROM provenance_sentences WHERE object_id=%s ORDER BY seq", (object_id,))
         sents = cur.fetchall()
+
         cur.execute("""SELECT event_type, date_from, date_to, place, actor, method, source_ref
                        FROM provenance_events WHERE object_id=%s
                        ORDER BY COALESCE(date_from,'0001-01-01')""", (object_id,))
         events = cur.fetchall()
+
         cur.execute("SELECT code, detail, weight FROM risk_signals WHERE object_id=%s ORDER BY weight DESC", (object_id,))
         risks = cur.fetchall()
-    return jsonify({"ok": True, "object": obj, "sentences": sents, "events": events, "risks": risks})
+
+    resp = jsonify({"ok": True, "object": obj, "sentences": sents, "events": events, "risks": risks})
+    resp.headers["Cache-Control"] = "no-store, max-age=0"
+    return resp
+
+
+
 
 @app.get("/api/graph/<int:object_id>")
 @with_db_retry
@@ -681,27 +798,26 @@ def similar_search():
     payload = request.get_json(force=True) or {}
     text = (payload.get("text") or "").strip()
     limit = max(1, min(int(payload.get("limit", 20)), 100))
-    candidates = int(payload.get("candidates", max(200, limit * 10)))  # ANN pre-topK
-    source_filter = (payload.get("source") or "").strip().upper()  # e.g., "AIC"
+    candidates = int(payload.get("candidates", max(200, limit * 10)))  # pre-topK by sentences
+    source_filter = (payload.get("source") or "").strip().upper()      # e.g., "AIC"
 
     if not text:
         return jsonify({"ok": False, "error": "text required"}), 400
 
-    # Embed without NumPy path
+    # Embed (existing logic)
     try:
         import torch
         vec_t = _load_model().encode([text], batch_size=1, show_progress_bar=False, convert_to_tensor=True)
-        if isinstance(vec_t, torch.Tensor):
-            vec = vec_t[0].detach().cpu().tolist()
-        else:
-            vec = list(vec_t[0])
+        vec = (vec_t[0].detach().cpu().tolist() if isinstance(vec_t, torch.Tensor) else list(vec_t[0]))
     except Exception as e:
         return jsonify({"ok": False, "error": f"embedding_unavailable: {e}"}), 503
 
     vec_json = json.dumps(_pad(vec, VEC_DIM))
-
-    # Build query with explicit HNSW usage and staged join
     where_src = "WHERE o.source = %s" if source_filter else ""
+
+    # --- IMPORTANT: dedupe by object_id using window function -----------------
+    # We pull top 'candidates' sentences, join to objects (apply optional source),
+    # then keep only ROW_NUMBER() = 1 per object_id (best/closest sentence).
     sql = f"""
     WITH nn AS (
       SELECT /*+ USE_INDEX(ps, hnsw_vec) */
@@ -710,15 +826,27 @@ def similar_search():
       FROM provenance_sentences ps
       ORDER BY distance
       LIMIT %s
+    ),
+    ranked AS (
+      SELECT
+        nn.object_id,
+        nn.seq,
+        nn.sentence,
+        nn.distance,
+        o.source,
+        o.title,
+        o.creator,
+        ROW_NUMBER() OVER (PARTITION BY nn.object_id ORDER BY nn.distance ASC) AS rk
+      FROM nn
+      JOIN objects o ON o.object_id = nn.object_id
+      {where_src}
     )
-    SELECT nn.object_id, nn.seq, nn.sentence, o.source, o.title, o.creator, nn.distance
-    FROM nn
-    JOIN objects o ON o.object_id = nn.object_id
-    {where_src}
-    ORDER BY nn.distance
+    SELECT object_id, seq, sentence, source, title, creator, distance
+    FROM ranked
+    WHERE rk = 1
+    ORDER BY distance
     LIMIT %s
     """
-
     params = [vec_json, candidates]
     if source_filter:
         params.append(source_filter)
@@ -728,10 +856,15 @@ def similar_search():
         with cursor() as cur:
             cur.execute(sql, params)
             rows = cur.fetchall()
-        return jsonify({"ok": True, "device": _DEVICE_INFO, "query": text, "data": rows,
-                        "meta": {"limit": limit, "candidates": candidates, "source": source_filter or None}})
+        return jsonify({
+            "ok": True,
+            "device": _DEVICE_INFO,
+            "query": text,
+            "data": rows,
+            "meta": {"limit": limit, "candidates": candidates, "source": source_filter or None}
+        })
     except OperationalError as e:
-        # TiDB OOM (1105) → retry with smaller candidate set automatically
+        # TiDB OOM (1105) → retry with smaller candidate set
         if e.args and e.args[0] == 1105 and candidates > max(100, limit * 4):
             smaller = max(100, limit * 4)
             params2 = [vec_json, smaller]
@@ -742,13 +875,67 @@ def similar_search():
                 with cursor() as cur:
                     cur.execute(sql, params2)
                     rows = cur.fetchall()
-                return jsonify({"ok": True, "device": _DEVICE_INFO, "query": text, "data": rows,
-                                "meta": {"limit": limit, "candidates": smaller, "source": source_filter or None,
-                                         "note": "retried with smaller candidate set"}})
+                return jsonify({
+                    "ok": True,
+                    "device": _DEVICE_INFO,
+                    "query": text,
+                    "data": rows,
+                    "meta": {"limit": limit, "candidates": smaller, "source": source_filter or None,
+                             "note": "retried with smaller candidate set"}
+                })
             except Exception as e2:
                 return jsonify({"ok": False, "error": f"oom_retry_failed: {e2}"}), 500
-        # Not OOM or still failed
-        return jsonify({"ok": False, "error": f"query_failed: {e}"}), 500
+        # Not OOM or still failed → fall back to Python-side dedupe below
+        # (This keeps you resilient if window functions act up.)
+        try:
+            # Simple fallback: same as your original query, dedupe in Python.
+            where_src2 = "WHERE o.source = %s" if source_filter else ""
+            sql2 = f"""
+            WITH nn AS (
+              SELECT ps.sent_id, ps.object_id, ps.seq, ps.sentence,
+                     VEC_COSINE_DISTANCE(ps.embedding, CAST(%s AS VECTOR({VEC_DIM}))) AS distance
+              FROM provenance_sentences ps
+              ORDER BY distance
+              LIMIT %s
+            )
+            SELECT nn.object_id, nn.seq, nn.sentence, o.source, o.title, o.creator, nn.distance
+            FROM nn
+            JOIN objects o ON o.object_id = nn.object_id
+            {where_src2}
+            ORDER BY nn.distance
+            LIMIT %s
+            """
+            params2 = [vec_json, candidates]
+            if source_filter:
+                params2.append(source_filter)
+            params2.append(limit * 5)  # grab extra to allow dedupe
+            with cursor() as cur:
+                cur.execute(sql2, params2)
+                many = cur.fetchall()
+
+            # Python dedupe: keep first (closest) row per object_id
+            seen = set()
+            out = []
+            for r in many:
+                oid = r.get("object_id")
+                if oid in seen:
+                    continue
+                seen.add(oid)
+                out.append(r)
+                if len(out) >= limit:
+                    break
+
+            return jsonify({
+                "ok": True,
+                "device": _DEVICE_INFO,
+                "query": text,
+                "data": out,
+                "meta": {"limit": limit, "candidates": candidates, "source": source_filter or None,
+                         "note": "python-dedup fallback"}
+            })
+        except Exception as e3:
+            return jsonify({"ok": False, "error": f"query_failed: {e} (fallback: {e3})"}), 500
+
 
 
 @app.get("/api/vocab")
