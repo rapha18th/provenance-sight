@@ -63,9 +63,7 @@ class ProvenanceAPI {
     if (filters?.min_score !== undefined) {
       params.append('min_score', filters.min_score.toString());
     }
-    if (filters?.source) {
-      params.append('source', filters.source);
-    }
+    // Note: 'source' filter not available in current LeadFilters interface
 
     const endpoint = `/api/leads${params.toString() ? `?${params.toString()}` : ''}`;
     const response = await this.request<LeadsResponse>(endpoint);

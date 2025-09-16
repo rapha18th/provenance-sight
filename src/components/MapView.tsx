@@ -1,6 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Loader2, MapPin } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+
+// Dynamic import to handle Leaflet properly
+import { MapContainer, TileLayer, Marker, Polyline, useMap } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+
+// Fix for default marker icons in bundlers
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
 
 interface Place {
   place: string;
@@ -14,122 +27,68 @@ interface MapViewProps {
   loading?: boolean;
 }
 
-export function MapView({ places, loading }: MapViewProps) {
-  const mapRef = useRef<HTMLDivElement>(null);
-  const [mapError, setMapError] = useState<string | null>(null);
+// Component to handle map invalidation when tab becomes visible
+function MapResizer() {
+  const map = useMap();
+  
+  useEffect(() => {
+    // Small delay to ensure container is fully visible
+    const timer = setTimeout(() => {
+      map.invalidateSize();
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, [map]);
 
+  return null;
+}
+
+// Component to handle map bounds and centering
+function MapBounds({ places }: { places: Place[] }) {
+  const map = useMap();
+  
+  useEffect(() => {
+    if (places.length === 0) return;
+    
+    if (places.length === 1) {
+      // Single point - center with reasonable zoom
+      const place = places[0];
+      if (place.lat && place.lon) {
+        map.setView([place.lat, place.lon], 6);
+      }
+    } else {
+      // Multiple points - fit bounds
+      const latLngs = places
+        .filter(p => p.lat != null && p.lon != null)
+        .map(p => [p.lat!, p.lon!] as [number, number]);
+      
+      if (latLngs.length > 1) {
+        map.fitBounds(latLngs, { padding: [20, 20] });
+      }
+    }
+  }, [map, places]);
+
+  return null;
+}
+
+export function MapView({ places, loading }: MapViewProps) {
+  const [mapKey, setMapKey] = useState(0);
+  
   // Filter places that have valid coordinates
   const geocodedPlaces = places.filter(p => p.lat != null && p.lon != null);
 
+  // Sort places by date for polyline
+  const sortedPlaces = [...geocodedPlaces].sort((a, b) => {
+    if (!a.date && !b.date) return 0;
+    if (!a.date) return 1;
+    if (!b.date) return -1;
+    return new Date(a.date).getTime() - new Date(b.date).getTime();
+  });
+
+  // Force re-render when places change to handle tab visibility
   useEffect(() => {
-    if (!mapRef.current || geocodedPlaces.length === 0) return;
-
-    // Simple map implementation using basic HTML/CSS
-    // In a real implementation, you'd use a mapping library like Leaflet
-    const mapContainer = mapRef.current;
-    mapContainer.innerHTML = '';
-
-    // Create a simple coordinate-based visualization
-    const bounds = {
-      minLat: Math.min(...geocodedPlaces.map(p => p.lat!)),
-      maxLat: Math.max(...geocodedPlaces.map(p => p.lat!)),
-      minLon: Math.min(...geocodedPlaces.map(p => p.lon!)),
-      maxLon: Math.max(...geocodedPlaces.map(p => p.lon!)),
-    };
-
-    const width = mapContainer.clientWidth;
-    const height = mapContainer.clientHeight;
-
-    // Sort places by date for polyline
-    const sortedPlaces = [...geocodedPlaces].sort((a, b) => {
-      if (!a.date && !b.date) return 0;
-      if (!a.date) return 1;
-      if (!b.date) return -1;
-      return new Date(a.date).getTime() - new Date(b.date).getTime();
-    });
-
-    // Create SVG for visualization
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('width', width.toString());
-    svg.setAttribute('height', height.toString());
-    svg.setAttribute('class', 'absolute inset-0 bg-slate-800 rounded-lg');
-
-    // Add background pattern
-    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-    const pattern = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
-    pattern.setAttribute('id', 'grid');
-    pattern.setAttribute('width', '20');
-    pattern.setAttribute('height', '20');
-    pattern.setAttribute('patternUnits', 'userSpaceOnUse');
-    
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', 'M 20 0 L 0 0 0 20');
-    path.setAttribute('fill', 'none');
-    path.setAttribute('stroke', 'hsl(var(--slate-700))');
-    path.setAttribute('stroke-width', '0.5');
-    
-    pattern.appendChild(path);
-    defs.appendChild(pattern);
-    svg.appendChild(defs);
-
-    const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    bgRect.setAttribute('width', '100%');
-    bgRect.setAttribute('height', '100%');
-    bgRect.setAttribute('fill', 'url(#grid)');
-    svg.appendChild(bgRect);
-
-    // Draw polyline connecting places chronologically
-    if (sortedPlaces.length > 1) {
-      const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-      const points = sortedPlaces.map(place => {
-        const x = ((place.lon! - bounds.minLon) / (bounds.maxLon - bounds.minLon)) * (width - 60) + 30;
-        const y = ((bounds.maxLat - place.lat!) / (bounds.maxLat - bounds.minLat)) * (height - 60) + 30;
-        return `${x},${y}`;
-      }).join(' ');
-      
-      polyline.setAttribute('points', points);
-      polyline.setAttribute('fill', 'none');
-      polyline.setAttribute('stroke', 'hsl(var(--primary))');
-      polyline.setAttribute('stroke-width', '2');
-      polyline.setAttribute('stroke-dasharray', '5,5');
-      svg.appendChild(polyline);
-    }
-
-    // Add markers for each place
-    geocodedPlaces.forEach((place, index) => {
-      const x = ((place.lon! - bounds.minLon) / (bounds.maxLon - bounds.minLon)) * (width - 60) + 30;
-      const y = ((bounds.maxLat - place.lat!) / (bounds.maxLat - bounds.minLat)) * (height - 60) + 30;
-
-      // Marker circle
-      const marker = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      marker.setAttribute('cx', x.toString());
-      marker.setAttribute('cy', y.toString());
-      marker.setAttribute('r', '8');
-      marker.setAttribute('fill', 'hsl(var(--primary))');
-      marker.setAttribute('stroke', 'hsl(var(--background))');
-      marker.setAttribute('stroke-width', '2');
-      marker.setAttribute('class', 'cursor-pointer hover:opacity-80 transition-opacity');
-      
-      // Add title for tooltip
-      const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-      title.textContent = `${place.place}${place.date ? ` (${new Date(place.date).getFullYear()})` : ''}`;
-      marker.appendChild(title);
-      
-      svg.appendChild(marker);
-
-      // Label
-      const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      label.setAttribute('x', (x + 12).toString());
-      label.setAttribute('y', (y + 4).toString());
-      label.setAttribute('fill', 'hsl(var(--slate-200))');
-      label.setAttribute('font-size', '12');
-      label.setAttribute('font-family', 'system-ui, sans-serif');
-      label.textContent = place.place;
-      svg.appendChild(label);
-    });
-
-    mapContainer.appendChild(svg);
-  }, [geocodedPlaces]);
+    setMapKey(prev => prev + 1);
+  }, [geocodedPlaces.length]);
 
   if (loading) {
     return (
@@ -165,6 +124,13 @@ export function MapView({ places, loading }: MapViewProps) {
     );
   }
 
+  // Calculate default center for initial render
+  const defaultCenter: [number, number] = geocodedPlaces.length === 1 
+    ? [geocodedPlaces[0].lat!, geocodedPlaces[0].lon!]
+    : [40, 0]; // World view center
+
+  const defaultZoom = geocodedPlaces.length === 1 ? 6 : 2;
+
   return (
     <Card className="bg-card border-slate-700">
       <CardHeader>
@@ -174,10 +140,47 @@ export function MapView({ places, loading }: MapViewProps) {
         </p>
       </CardHeader>
       <CardContent className="p-0">
-        <div 
-          ref={mapRef} 
-          className="relative h-96 w-full bg-slate-800 rounded-b-lg overflow-hidden"
-        />
+        <div className="h-96 w-full rounded-b-lg overflow-hidden">
+          <MapContainer
+            key={mapKey}
+            center={defaultCenter}
+            zoom={defaultZoom}
+            style={{ height: '100%', width: '100%' }}
+            className="rounded-b-lg"
+          >
+            <TileLayer
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            />
+            
+            {/* Map resize handler for tab visibility */}
+            <MapResizer />
+            
+            {/* Bounds and centering handler */}
+            <MapBounds places={geocodedPlaces} />
+            
+            {/* Markers for each place */}
+            {geocodedPlaces.map((place, index) => (
+              <Marker
+                key={`${place.place}-${index}`}
+                position={[place.lat!, place.lon!]}
+              />
+            ))}
+            
+            {/* Polyline connecting places chronologically */}
+            {sortedPlaces.length > 1 && (
+              <Polyline
+                positions={sortedPlaces.map(p => [p.lat!, p.lon!])}
+                pathOptions={{
+                  color: "#3b82f6",
+                  weight: 2,
+                  opacity: 0.7,
+                  dashArray: "5, 5"
+                }}
+              />
+            )}
+          </MapContainer>
+        </div>
       </CardContent>
     </Card>
   );

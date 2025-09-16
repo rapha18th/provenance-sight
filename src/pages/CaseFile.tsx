@@ -262,10 +262,13 @@ export default function CaseFile() {
                   </CardContent>
                 </Card>
 
-                <MapView 
-                  places={placesData || []}
-                  loading={isLoadingCase}
-                />
+                {/* Map only renders when Network tab is active to handle tile loading */}
+                {activeTab === 'network' && (
+                  <MapView 
+                    places={placesData || []}
+                    loading={isLoadingCase}
+                  />
+                )}
               </div>
             </TabsContent>
 
