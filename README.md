@@ -1,6 +1,6 @@
 # Provenance Radar
 
-**An advanced investigation tool for identifying objects with potentially problematic ownership histories in museum collections**
+**A sophisticated solution for uncovering and documenting the ownership history of museum artifacts**
 
 Provenance Radar combines AI-powered risk assessment, network analysis, and timeline visualization to help researchers, curators, and investigators identify cultural heritage objects that may have been looted, stolen, or otherwise acquired through problematic means.
 
